@@ -1,0 +1,9 @@
+torch>=2.2.0
+torchvision
+torchaudio
+pyyaml
+numpy
+flash-attn --no-build-isolation
+triton
+tqdm
+wandb
