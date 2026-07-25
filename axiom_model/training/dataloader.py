@@ -10,7 +10,7 @@ class MemmapDataset(Dataset):
         self.seq_len = seq_len
         # Lazy initialization for memmap
         self.data = None
-        self._len = os.path.getsize(bin_path) // 2 # uint16 is 2 bytes
+        self._len = os.path.getsize(bin_path) // 4 # uint32 is 4 bytes
         
     def _lazy_init(self):
         if self.data is None:

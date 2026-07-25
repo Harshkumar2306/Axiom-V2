@@ -23,8 +23,8 @@ def main():
     logger.info("Initializing Kaggle Dataset metadata...")
     
     metadata = {
-      "title": "Axiom v2 10B Token Pretraining Dataset",
-      "id": "hrsh0o23/axiom-v2-10b-dataset",  # Matches your kaggle.json username
+      "title": "Axiom v2 4.5B Token Pretraining Dataset",
+      "id": "hrsh0o23/axiom-v2-4-5b-dataset",  # Matches your kaggle.json username
       "licenses": [
         {
           "name": "CC0-1.0"
@@ -46,7 +46,7 @@ def main():
         logger.info("Please install it via 'pip install kaggle' and ensure your kaggle.json token is in ~/.kaggle/")
         return
         
-    logger.info("Uploading dataset to Kaggle (this may take a while for 17.5GB)...")
+    logger.info("Uploading dataset to Kaggle (this may take a while for 18GB)...")
     
     try:
         # Use 'create' for the first time, 'version' for updates

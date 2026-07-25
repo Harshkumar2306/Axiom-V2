@@ -26,9 +26,9 @@ def generate_manifest(dataset_dir: str, version: str = "v1"):
     train_size = os.path.getsize(train_path) if os.path.exists(train_path) else 0
     val_size = os.path.getsize(val_path) if os.path.exists(val_path) else 0
     
-    # 2 bytes per token (uint16)
-    train_tokens = train_size // 2
-    val_tokens = val_size // 2
+    # 4 bytes per token (uint32)
+    train_tokens = train_size // 4
+    val_tokens = val_size // 4
 
     manifest = {
         "dataset_version": version,
@@ -43,9 +43,6 @@ def generate_manifest(dataset_dir: str, version: str = "v1"):
         },
         "train_tokens": train_tokens,
         "validation_tokens": val_tokens,
-        "filtered_documents": "Unknown (Compute from pipeline logs)",
-        "quality_filtered": "Unknown (Compute from pipeline logs)",
-        "duplicates_removed": "Unknown (Compute from pipeline logs)",
         "sha256": {
             "train.bin": compute_sha256(train_path),
             "val.bin": compute_sha256(val_path)
