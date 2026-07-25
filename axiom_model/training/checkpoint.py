@@ -4,6 +4,7 @@ import logging
 import shutil
 import random
 import numpy as np
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,20 @@ class CheckpointManager:
         if is_best:
             best_path = os.path.join(self.save_dir, "best.pt")
             shutil.copyfile(latest_path, best_path)
-            logger.info(f"New best checkpoint saved to {best_path}")
+            
+            # Save metadata
+            metadata = {
+                "best_step": step,
+                "best_epoch": epoch,
+                "best_val_loss": best_val_loss,
+                "best_perplexity": math.exp(best_val_loss) if best_val_loss < 100 else float('inf')
+            }
+            meta_path = os.path.join(self.save_dir, "best_metadata.json")
+            import json
+            with open(meta_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+                
+            logger.info(f"New best checkpoint saved to {best_path} (Loss: {best_val_loss:.4f})")
 
     def load(self, model, optimizer, scheduler, scaler, path="./checkpoints/latest.pt"):
         if not os.path.exists(path):
