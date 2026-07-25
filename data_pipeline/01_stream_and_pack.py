@@ -61,6 +61,10 @@ def stream_and_pack(output_dir: str):
             
             pbar = tqdm(total=target_dataset_tokens, desc=mix_name, unit="tok")
             
+            train_buffer = []
+            val_buffer = []
+            BUFFER_LIMIT = 500_000 # Buffer half a million tokens before writing
+            
             for row in dataset:
                 text = row.get('text', row.get('content', ''))
                 if not text or not is_quality_text(text): 
@@ -70,23 +74,34 @@ def stream_and_pack(output_dir: str):
                 tokens = enc.encode_ordinary(text)
                 tokens.append(enc.eot_token)
                 
-                # Pack to uint32 (fixes the OverflowError)
-                np_tokens = np.array(tokens, dtype=np.uint32)
-                
-                # Write directly to disk
+                # Buffer the tokens
                 if val_tokens < (VAL_SPLIT_TOKENS * config['weight']):
-                    f_val.write(np_tokens.tobytes())
+                    val_buffer.extend(tokens)
                     val_tokens += len(tokens)
                 else:
-                    f_train.write(np_tokens.tobytes())
+                    train_buffer.extend(tokens)
                     
                 dataset_tokens += len(tokens)
                 total_tokens += len(tokens)
                 pbar.update(len(tokens))
                 
+                # Flush Train Buffer
+                if len(train_buffer) >= BUFFER_LIMIT:
+                    f_train.write(np.array(train_buffer, dtype=np.uint32).tobytes())
+                    train_buffer.clear()
+                    
+                # Flush Val Buffer
+                if len(val_buffer) >= BUFFER_LIMIT:
+                    f_val.write(np.array(val_buffer, dtype=np.uint32).tobytes())
+                    val_buffer.clear()
+                
                 if dataset_tokens >= target_dataset_tokens:
                     break
                     
+            # Final flush of remaining buffers
+            if train_buffer: f_train.write(np.array(train_buffer, dtype=np.uint32).tobytes())
+            if val_buffer: f_val.write(np.array(val_buffer, dtype=np.uint32).tobytes())
+            
             pbar.close()
                     
     logger.info(f"🎉 Pipeline Complete! Total tokens packed: {total_tokens:,}")
