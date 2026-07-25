@@ -2,6 +2,8 @@ import os
 import torch
 import logging
 import shutil
+import random
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,8 @@ class CheckpointManager:
             'step': step,
             'best_val_loss': best_val_loss,
             'config': config,
+            'py_rng_state': random.getstate(),
+            'np_rng_state': np.random.get_state(),
             'rng_state': torch.get_rng_state(),
             'cuda_rng_state': torch.cuda.get_rng_state() if torch.cuda.is_available() else None
         }
@@ -51,6 +55,11 @@ class CheckpointManager:
             scheduler.load_state_dict(state['scheduler'])
         if scaler and state['scaler']:
             scaler.load_state_dict(state['scaler'])
+            
+        if 'py_rng_state' in state:
+            random.setstate(state['py_rng_state'])
+        if 'np_rng_state' in state:
+            np.random.set_state(state['np_rng_state'])
             
         torch.set_rng_state(state['rng_state'])
         if state['cuda_rng_state'] is not None and torch.cuda.is_available():
