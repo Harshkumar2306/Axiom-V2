@@ -13,16 +13,16 @@ def compute_minhash(text: str, num_perm: int = 128):
         m.update(word.encode('utf8'))
     return m
 
-def run_deduplication(input_dir: str, output_dir: str):
+def run_deduplication(input_dir: str, output_dir: str, threshold: float = 0.85):
     os.makedirs(output_dir, exist_ok=True)
     logger.info("Starting Phase 2: MinHash LSH Deduplication.")
-    logger.info("Initializing datasketch MinHashLSH index with threshold=0.85...")
+    logger.info(f"Initializing datasketch MinHashLSH index with threshold={threshold}...")
     
     if not os.path.exists(input_dir):
         logger.warning(f"Input directory {input_dir} not found. Skipping deduplication.")
         return
         
-    lsh = MinHashLSH(threshold=0.85, num_perm=128)
+    lsh = MinHashLSH(threshold=threshold, num_perm=128)
     
     for filename in os.listdir(input_dir):
         if not filename.endswith(".jsonl"): continue

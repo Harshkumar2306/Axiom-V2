@@ -1,10 +1,20 @@
 import os
 import json
 import logging
+import hashlib
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def compute_sha256(filepath):
+    if not os.path.exists(filepath):
+        return None
+    sha256_hash = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
 
 def generate_manifest(dataset_dir: str, version: str = "v1"):
     os.makedirs(dataset_dir, exist_ok=True)
@@ -22,15 +32,24 @@ def generate_manifest(dataset_dir: str, version: str = "v1"):
 
     manifest = {
         "dataset_version": version,
-        "tokenizer": "cl100k_base (Llama-3 proxy)",
-        "total_documents": "Unknown (Compute from pipeline logs)",
+        "created_at": datetime.now().isoformat(),
+        "tokenizer": "cl100k_base",
+        "tokenizer_vocab_size": 100277,
+        "sources": {
+            "fineweb_edu": "HuggingFaceFW/fineweb-edu",
+            "starcoder": "bigcode/starcoderdata",
+            "wikipedia": "wikipedia 20220301.en",
+            "redpajama": "togethercomputer/RedPajama-Data-1T"
+        },
         "train_tokens": train_tokens,
         "validation_tokens": val_tokens,
         "filtered_documents": "Unknown (Compute from pipeline logs)",
+        "quality_filtered": "Unknown (Compute from pipeline logs)",
         "duplicates_removed": "Unknown (Compute from pipeline logs)",
-        "train_bin_size_bytes": train_size,
-        "val_bin_size_bytes": val_size,
-        "timestamp": datetime.now().isoformat()
+        "sha256": {
+            "train.bin": compute_sha256(train_path),
+            "val.bin": compute_sha256(val_path)
+        }
     }
     
     out_path = os.path.join(dataset_dir, "manifest.json")
