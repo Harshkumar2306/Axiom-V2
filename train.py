@@ -62,8 +62,28 @@ def main():
     else:
         logger.info("torch.compile() skipped (not supported on this device/environment).")
         
-    # 5. Initialization Complete (Ready for Phase 2/3 Data Injection)
-    logger.info("Phase 1 Engine Architecture Initialization Complete. Ready for Dataloader & SGDR loop.")
+    # 5. Optimizer & SGDR Scheduler Setup (Preventing Validation Plateaus)
+    # We implement AdamW alongside SGDR (Warm Restarts) to prevent the model 
+    # from getting stuck in saddle points/local minima during mid-training.
+    optimizer = torch.optim.AdamW(
+        model.parameters(), 
+        lr=float(config['training']['learning_rate']), 
+        weight_decay=float(config['training']['weight_decay'])
+    )
+    
+    # SGDR: This acts as the "helicopter" bumping the optimizer out of the ditch
+    t_0 = 10000  # Number of steps before the first warm restart
+    t_mult = 2   # Multiply the restart interval by this factor after each restart
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, 
+        T_0=t_0, 
+        T_mult=t_mult, 
+        eta_min=1e-5
+    )
+    logger.info(f"SGDR Scheduler active: T_0={t_0}, T_mult={t_mult}. Saddle point prevention engaged.")
+    
+    # 6. Initialization Complete (Ready for Phase 2/3 Data Injection)
+    logger.info("Phase 1 Engine Architecture Initialization Complete. Ready for Dataloader.")
 
 if __name__ == "__main__":
     main()
