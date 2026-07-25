@@ -22,6 +22,8 @@ class Trainer:
         self.scaler = torch.amp.GradScaler('cuda' if torch.cuda.is_available() else 'cpu', enabled=torch.cuda.is_available())
         self.profiler = Profiler() if is_rank_zero else None
         
+        self._rolling_loss = None
+        
     def train_step(self, x, y, is_last_accum_step=True):
         # Mixed Precision
         with torch.autocast(device_type=self.device.type, dtype=torch.float16 if self.device.type == 'cuda' else torch.bfloat16):
@@ -30,10 +32,23 @@ class Trainer:
             # Scale loss by accumulation steps so gradients are mathematically equivalent to larger batch
             loss = loss / self.grad_accum_steps
             
-        # NaN Detection on Loss
+        # 1. NaN/Inf Safety Trap
         if not torch.isfinite(loss):
-            logger.error(f"Loss is {loss.item()}! Terminating to prevent corruption.")
-            raise ValueError("Loss exploded to NaN/Inf")
+            logger.error(f"[Loss Safety] Loss is {loss.item()}! Skipping batch to prevent corruption.")
+            self.optimizer.zero_grad(set_to_none=True)
+            return float('inf'), None
+            
+        # 2. Loss Spike Anomaly Trap
+        scaled_loss = loss.item() * self.grad_accum_steps
+        if self._rolling_loss is None:
+            self._rolling_loss = scaled_loss
+        else:
+            if scaled_loss > self._rolling_loss * 5.0 and self._rolling_loss > 0.1:
+                logger.warning(f"[Loss Safety] Severe loss spike detected ({scaled_loss:.2f} vs rolling {self._rolling_loss:.2f}). Skipping batch.")
+                self.optimizer.zero_grad(set_to_none=True)
+                return scaled_loss, None
+            # Update rolling average smoothly
+            self._rolling_loss = 0.99 * self._rolling_loss + 0.01 * scaled_loss
             
         # Backward pass with scaler
         self.scaler.scale(loss).backward()
@@ -42,16 +57,17 @@ class Trainer:
             # Unscale gradients for clipping
             self.scaler.unscale_(self.optimizer)
             
-            # NaN Detection on Gradients (Clip will also catch this, but good to track)
+            # 3. Gradient NaN/Explosion Trap
             grad_norm = clip_grad_norm_(self.model.parameters(), self.clip_grad)
             if not torch.isfinite(grad_norm):
-                logger.warning(f"Gradient norm is {grad_norm.item()}! Skipping optimizer step.")
+                logger.warning(f"[Gradient Safety] Gradient norm is {grad_norm.item()}! Skipping optimizer step to save weights.")
+                self.optimizer.zero_grad(set_to_none=True)
             else:
                 self.scaler.step(self.optimizer)
                 
             self.scaler.update()
             self.optimizer.zero_grad(set_to_none=True)
             
-            return loss.item() * self.grad_accum_steps, grad_norm.item()
+            return scaled_loss, grad_norm.item()
             
-        return loss.item() * self.grad_accum_steps, None
+        return scaled_loss, None

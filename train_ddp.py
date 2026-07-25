@@ -27,9 +27,12 @@ def handle_sigint(signum, frame):
     logger.info("\n[Graceful Exit] Pause signal received (SIGINT). Will save checkpoint and exit after current step...")
     pause_requested = True
 
+from datetime import timedelta
+
 def setup():
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
-        dist.init_process_group(backend="nccl")
+        # 30 minute timeout to prevent silent deadlocks on Kaggle
+        dist.init_process_group(backend="nccl", timeout=timedelta(minutes=30))
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
         local_rank = int(os.environ["LOCAL_RANK"])
@@ -150,7 +153,20 @@ def main():
             trainer.profiler.start_step(x.size(0), x.size(1))
             
         is_last_accum = (step + 1) % trainer.grad_accum_steps == 0
-        loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
+        
+        try:
+            loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                logger.error(f"[OOM Safety] Out of memory caught on step {step}. Clearing cache and skipping batch.")
+                if torch.cuda.is_available(): torch.cuda.empty_cache()
+                elif hasattr(torch.mps, 'empty_cache'): torch.mps.empty_cache()
+                
+                # We need to manually cycle the iterator to drop the bad batch
+                if is_last_accum: optimizer.zero_grad(set_to_none=True)
+                continue
+            else:
+                raise e
         
         if is_last_accum:
             scheduler_mgr.step()
