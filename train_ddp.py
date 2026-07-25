@@ -1,6 +1,8 @@
 import os
+import sys
 import yaml
 import torch
+import signal
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import logging
@@ -16,6 +18,14 @@ from axiom_model.utils.reproducibility import set_seed
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Global flag for graceful exit
+pause_requested = False
+
+def handle_sigint(signum, frame):
+    global pause_requested
+    logger.info("\n[Graceful Exit] Pause signal received (SIGINT). Will save checkpoint and exit after current step...")
+    pause_requested = True
 
 def setup():
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
@@ -33,14 +43,17 @@ def cleanup():
         dist.destroy_process_group()
 
 def main():
+    global pause_requested
+    signal.signal(signal.SIGINT, handle_sigint)
+    
     rank, local_rank, world_size, is_distributed = setup()
     is_rank_zero = (rank == 0)
-    
-    set_seed(42 + rank)
     
     with open("axiom_model/configs/500M.yaml", 'r') as f:
         config = yaml.safe_load(f)
         
+    set_seed(config.get('training', {}).get('seed', 42) + rank)
+    
     device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
     
     # 1. Build Model
@@ -62,11 +75,28 @@ def main():
         model = DDP(model, device_ids=[local_rank])
         
     # 2. Build Optimizer & Dataloaders
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.1)
+    train_cfg = config.get('training', {})
+    optimizer = torch.optim.AdamW(
+        model.parameters(), 
+        lr=float(train_cfg.get('learning_rate', 3e-4)), 
+        weight_decay=train_cfg.get('weight_decay', 0.1)
+    )
     scheduler_mgr = SchedulerManager(optimizer, config.get('scheduler', {}))
     
-    train_loader, train_sampler = create_dataloader("./data/bin/train.bin", batch_size=4, seq_len=4096, is_distributed=is_distributed, is_train=True)
-    val_loader, _ = create_dataloader("./data/bin/val.bin", batch_size=4, seq_len=4096, is_distributed=is_distributed, is_train=False)
+    train_loader, train_sampler = create_dataloader(
+        "./data/bin/train.bin", 
+        batch_size=train_cfg.get('batch_size', 8), 
+        seq_len=model_cfg['max_seq_len'], 
+        is_distributed=is_distributed, 
+        is_train=True
+    )
+    val_loader, _ = create_dataloader(
+        "./data/bin/val.bin", 
+        batch_size=train_cfg.get('batch_size', 8), 
+        seq_len=model_cfg['max_seq_len'], 
+        is_distributed=is_distributed, 
+        is_train=False
+    )
     
     # 3. Setup Managers
     ckpt_mgr = CheckpointManager()
@@ -79,16 +109,38 @@ def main():
     
     # 5. Train Loop
     if is_rank_zero:
-        logger.info("Starting Phase 3 Pretraining...")
+        logger.info(f"Starting Phase 3 Pretraining from step {start_step}...")
+        
+    if train_sampler:
+        train_sampler.set_epoch(start_epoch)
         
     train_iter = iter(train_loader)
     
-    for step in range(start_step, config.get('max_steps', 10000)):
+    # Fast-forward iterator if resuming
+    if start_step > 0:
+        if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {start_step} steps to resume...")
+        for _ in range(start_step):
+            try:
+                next(train_iter)
+            except StopIteration:
+                start_epoch += 1
+                if train_sampler: train_sampler.set_epoch(start_epoch)
+                train_iter = iter(train_loader)
+                next(train_iter)
+                
+    for step in range(start_step, train_cfg.get('max_steps', 100000)):
+        
+        # Check for pause file
+        if os.path.exists("pause.flag"):
+            if is_rank_zero: logger.info("\n[Graceful Exit] 'pause.flag' detected. Initiating pause sequence...")
+            pause_requested = True
+            os.remove("pause.flag")
+            
         try:
             x, y = next(train_iter)
         except StopIteration:
-            if train_sampler:
-                train_sampler.set_epoch(step)
+            start_epoch += 1
+            if train_sampler: train_sampler.set_epoch(start_epoch)
             train_iter = iter(train_loader)
             x, y = next(train_iter)
             
@@ -116,14 +168,24 @@ def main():
                     profiler_stats=stats
                 )
                 
-            if step > 0 and step % config.get('eval_interval', 1000) == 0:
+            eval_interval = train_cfg.get('eval_interval', 1000)
+            if step > 0 and step % eval_interval == 0:
                 val_loss, val_ppl = evaluator.evaluate()
                 train_logger.log_metrics(step, loss, val_loss=val_loss, perplexity=val_ppl)
                 
                 is_best = val_loss < best_val_loss
                 if is_best: best_val_loss = val_loss
                 
-                ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, 0, step, best_val_loss, config, is_best=is_best)
+                ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=is_best)
+                
+        # Graceful Pause Exit
+        if pause_requested and is_last_accum:
+            if is_rank_zero:
+                logger.info(f"Saving paused checkpoint at step {step}...")
+                ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=False)
+                train_logger.close()
+            cleanup()
+            sys.exit(0)
                 
     if is_rank_zero:
         train_logger.close()
