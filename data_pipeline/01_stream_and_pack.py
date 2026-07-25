@@ -81,7 +81,7 @@ def stream_and_pack(output_dir: str):
             if dataset_tokens > 0:
                 logger.info(f"Resuming {mix_name} from {dataset_tokens:,} tokens...")
                 
-            dataset = load_dataset(config["repo"], config.get("name"), split=config["split"], streaming=True)
+            dataset = load_dataset(config["repo"], config.get("name"), split=config["split"], streaming=True, trust_remote_code=True)
             
             pbar = tqdm(total=target_dataset_tokens, initial=dataset_tokens, desc=mix_name, unit="tok")
             
