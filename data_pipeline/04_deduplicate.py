@@ -28,7 +28,7 @@ def run_deduplication(input_dir: str, output_dir: str):
         if not filename.endswith(".jsonl"): continue
         
         in_path = os.path.join(input_dir, filename)
-        out_path = os.path.join(output_dir, filename.replace("_filtered.jsonl", "_deduped.jsonl"))
+        out_path = os.path.join(output_dir, filename.replace("_scored.jsonl", "_deduped.jsonl"))
         
         logger.info(f"Deduplicating {in_path} -> {out_path}")
         
@@ -55,4 +55,4 @@ def run_deduplication(input_dir: str, output_dir: str):
         logger.info(f"Deduplicated {filename}: {passed}/{total} documents unique ({(passed/max(1,total))*100:.2f}%)")
 
 if __name__ == "__main__":
-    run_deduplication("./data/filtered", "./data/deduped")
+    run_deduplication("./data/scored", "./data/deduped")

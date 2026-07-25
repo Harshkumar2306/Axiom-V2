@@ -55,4 +55,5 @@ def tokenize_and_pack(input_dir: str, output_dir: str, val_split: float = 0.001)
     logger.info(f"Tokenization complete. Packed {total_tokens} tokens. Datasets ready for Pretraining.")
 
 if __name__ == "__main__":
-    tokenize_and_pack("./data/deduped", "./data/bin")
+    # You can pass val_split=0.001 (0.1%)
+    tokenize_and_pack("./data/deduped", "./dataset/v1", val_split=0.001)
