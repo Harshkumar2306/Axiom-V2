@@ -24,7 +24,7 @@ def main():
     
     metadata = {
       "title": "Axiom v2 10B Token Pretraining Dataset",
-      "id": "harshkumar2306/axiom-v2-10b-dataset",  # You can change the username/slug here if needed
+      "id": "hrsh0o23/axiom-v2-10b-dataset",  # Matches your kaggle.json username
       "licenses": [
         {
           "name": "CC0-1.0"
