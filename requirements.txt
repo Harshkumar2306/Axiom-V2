@@ -3,7 +3,9 @@ torchvision
 torchaudio
 pyyaml
 numpy
-flash-attn --no-build-isolation
 triton
 tqdm
 wandb
+datasets
+tiktoken
+datasketch
