@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 from .attention import Attention, precompute_freqs_cis
 from .ffn import SwiGLU, RMSNorm
 
@@ -22,11 +23,13 @@ class TransformerBlock(nn.Module):
 class AxiomV2(nn.Module):
     """The Axiom v2 500M Core Engine Architecture"""
     def __init__(self, vocab_size: int, d_model: int, n_layers: int, n_heads: int, 
-                 n_kv_heads: int, max_seq_len: int, multiple_of: int, norm_eps: float, rope_theta: float):
+                 n_kv_heads: int, max_seq_len: int, multiple_of: int, norm_eps: float, rope_theta: float,
+                 gradient_checkpointing: bool = False):
         super().__init__()
         self.vocab_size = vocab_size
         self.n_layers = n_layers
         self.max_seq_len = max_seq_len
+        self.gradient_checkpointing = gradient_checkpointing
         
         self.tok_embeddings = nn.Embedding(vocab_size, d_model)
         
@@ -56,7 +59,11 @@ class AxiomV2(nn.Module):
         freqs_cis = self.freqs_cis[:seqlen].to(h.device)
 
         for layer in self.layers:
-            h = layer(h, freqs_cis)
+            if self.gradient_checkpointing and self.training:
+                # use_reentrant=False is the recommended way for PyTorch >= 1.11
+                h = torch.utils.checkpoint.checkpoint(layer, h, freqs_cis, use_reentrant=False)
+            else:
+                h = layer(h, freqs_cis)
             
         h = self.norm(h)
         output = self.output(h)

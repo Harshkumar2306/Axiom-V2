@@ -1,0 +1,47 @@
+import torch
+import numpy as np
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.distributed import DistributedSampler
+import os
+
+class MemmapDataset(Dataset):
+    def __init__(self, bin_path, seq_len=4096):
+        self.bin_path = bin_path
+        self.seq_len = seq_len
+        # Lazy initialization for memmap
+        self.data = None
+        self._len = os.path.getsize(bin_path) // 2 # uint16 is 2 bytes
+        
+    def _lazy_init(self):
+        if self.data is None:
+            self.data = np.memmap(self.bin_path, dtype=np.uint16, mode='r')
+
+    def __len__(self):
+        # subtract seq_len to avoid out of bounds
+        return (self._len - self.seq_len - 1) // self.seq_len
+
+    def __getitem__(self, idx):
+        self._lazy_init()
+        start = idx * self.seq_len
+        end = start + self.seq_len + 1
+        
+        chunk = self.data[start:end].astype(np.int64)
+        x = torch.from_numpy(chunk[:-1])
+        y = torch.from_numpy(chunk[1:])
+        return x, y
+
+def create_dataloader(bin_path, batch_size, seq_len, is_distributed=True, is_train=True):
+    dataset = MemmapDataset(bin_path, seq_len)
+    sampler = DistributedSampler(dataset, shuffle=is_train) if is_distributed else None
+    
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=sampler,
+        shuffle=(sampler is None and is_train),
+        num_workers=4,
+        pin_memory=torch.cuda.is_available(),
+        prefetch_factor=4 if torch.cuda.is_available() else None,
+        drop_last=True
+    )
+    return loader, sampler
