@@ -34,9 +34,7 @@ def download_and_stream(output_dir: str):
         out_path = os.path.join(output_dir, f"{mix_name}_raw.jsonl")
         logger.info(f"Writing stream to {out_path}...")
         
-        # In a real execution, we would stream this to disk.
-        # This is the architectural layout for Phase 2.
-        '''
+        # Execute the stream to disk
         import json
         with open(out_path, 'w', encoding='utf-8') as f:
             for i, row in enumerate(dataset):
@@ -49,8 +47,8 @@ def download_and_stream(output_dir: str):
                 if current_bytes >= target_bytes:
                     logger.info(f"Reached target size for {mix_name}!")
                     break
-        '''
-        logger.info(f"Successfully configured pipeline for {mix_name}.")
+                    
+        logger.info(f"Successfully downloaded {mix_name}.")
 
 if __name__ == "__main__":
     # Use a local data folder that gitignore already ignores

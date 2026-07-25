@@ -42,9 +42,35 @@ def clean_text(text: str) -> str:
 def filter_dataset(input_dir: str, output_dir: str):
     os.makedirs(output_dir, exist_ok=True)
     logger.info("Starting Phase 2: Quality Filtering.")
-    # Example implementation layout
-    logger.info(f"Scanning raw chunks in {input_dir}...")
-    logger.info(f"Filtered high-quality data will be routed to {output_dir}.")
+    
+    if not os.path.exists(input_dir):
+        logger.warning(f"Input directory {input_dir} not found. Skipping filter.")
+        return
+        
+    for filename in os.listdir(input_dir):
+        if not filename.endswith(".jsonl"): continue
+        
+        in_path = os.path.join(input_dir, filename)
+        out_path = os.path.join(output_dir, filename.replace("_raw.jsonl", "_filtered.jsonl"))
+        
+        logger.info(f"Filtering {in_path} -> {out_path}")
+        
+        total = 0
+        passed = 0
+        with open(in_path, 'r', encoding='utf-8') as fin, open(out_path, 'w', encoding='utf-8') as fout:
+            for line in fin:
+                total += 1
+                try:
+                    data = json.loads(line)
+                    text = data.get('text', '')
+                    if is_high_quality(text):
+                        data['text'] = clean_text(text)
+                        fout.write(json.dumps(data) + '\n')
+                        passed += 1
+                except json.JSONDecodeError:
+                    continue
+                    
+        logger.info(f"Filtered {filename}: {passed}/{total} documents passed ({(passed/max(1,total))*100:.2f}%)")
 
 if __name__ == "__main__":
     filter_dataset("./data/raw", "./data/filtered")
