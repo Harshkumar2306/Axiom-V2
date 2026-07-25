@@ -14,7 +14,7 @@ class MemmapDataset(Dataset):
         
     def _lazy_init(self):
         if self.data is None:
-            self.data = np.memmap(self.bin_path, dtype=np.uint16, mode='r')
+            self.data = np.memmap(self.bin_path, dtype=np.uint32, mode='r')
 
     def __len__(self):
         # subtract seq_len to avoid out of bounds

@@ -3,6 +3,12 @@ import logging
 import numpy as np
 import tiktoken
 from datasets import load_dataset
+from tqdm import tqdm
+import warnings
+
+# Suppress HuggingFace authentication warnings
+warnings.filterwarnings("ignore")
+logging.getLogger("datasets").setLevel(logging.ERROR)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -17,23 +23,20 @@ DATASET_MIX = {
     "books": {"repo": "togethercomputer/RedPajama-Data-1T", "name": "book", "split": "train", "weight": 0.03}
 }
 
-TARGET_TOTAL_TOKENS = 10_000_000_000  # 10 Billion tokens
-VAL_SPLIT_TOKENS = 250_000_000        # ~500MB of val data
+# Because cl100k_base has 100,277 tokens, we MUST use uint32 (4 bytes per token).
+# To fit inside Kaggle's 20GB limit, the maximum tokens we can pack is 4.5 Billion (18 GB).
+TARGET_TOTAL_TOKENS = 4_500_000_000  # 4.5 Billion tokens (18 GB)
+VAL_SPLIT_TOKENS = 125_000_000       # ~500MB of val data
 
 def is_quality_text(text: str) -> bool:
     """Basic inline filter to drop garbage without needing disk."""
     if len(text) < 100: return False
     if len(text) > 100000: return False
-    
-    # Check for excessive uppercase (shouting / spam)
     upper_count = sum(1 for c in text if c.isupper())
     if upper_count / len(text) > 0.4: return False
-    
-    # Check if vocabulary is too simplistic or repetitive
     words = text.split()
     if len(words) < 10: return False
     if len(set(words)) / len(words) < 0.2: return False
-    
     return True
 
 def stream_and_pack(output_dir: str):
@@ -53,8 +56,10 @@ def stream_and_pack(output_dir: str):
             target_dataset_tokens = int(TARGET_TOTAL_TOKENS * config['weight'])
             dataset_tokens = 0
             
-            logger.info(f"Streaming {mix_name} [Target: {target_dataset_tokens:,} tokens]...")
+            logger.info(f"Streaming {mix_name} [Target: {target_dataset_tokens:,} tokens]")
             dataset = load_dataset(config["repo"], config.get("name"), split=config["split"], streaming=True)
+            
+            pbar = tqdm(total=target_dataset_tokens, desc=mix_name, unit="tok")
             
             for row in dataset:
                 text = row.get('text', row.get('content', ''))
@@ -65,10 +70,10 @@ def stream_and_pack(output_dir: str):
                 tokens = enc.encode_ordinary(text)
                 tokens.append(enc.eot_token)
                 
-                # Pack to uint16
-                np_tokens = np.array(tokens, dtype=np.uint16)
+                # Pack to uint32 (fixes the OverflowError)
+                np_tokens = np.array(tokens, dtype=np.uint32)
                 
-                # Write directly to disk (streaming bypasses 40GB limit)
+                # Write directly to disk
                 if val_tokens < (VAL_SPLIT_TOKENS * config['weight']):
                     f_val.write(np_tokens.tobytes())
                     val_tokens += len(tokens)
@@ -77,13 +82,12 @@ def stream_and_pack(output_dir: str):
                     
                 dataset_tokens += len(tokens)
                 total_tokens += len(tokens)
+                pbar.update(len(tokens))
                 
                 if dataset_tokens >= target_dataset_tokens:
-                    logger.info(f"✅ {mix_name} reached target token count: {dataset_tokens:,}")
                     break
                     
-                if dataset_tokens % 10_000_000 == 0:
-                    logger.info(f"[{mix_name}] Tokenized {dataset_tokens:,} / {target_dataset_tokens:,} tokens...")
+            pbar.close()
                     
     logger.info(f"🎉 Pipeline Complete! Total tokens packed: {total_tokens:,}")
     logger.info(f"Train File: {train_bin_path}")
