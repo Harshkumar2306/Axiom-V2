@@ -136,6 +136,9 @@ def main():
         logger.info(f"Context : {model_cfg['max_seq_len']} Tokens")
         logger.info(f"Math    : Batch {train_cfg.get('batch_size', 2)} x {config.get('training', {}).get('grad_accum_steps', 16)} Accum x {world_size} GPUs = {effective_batch} Effective Batch")
         logger.info(f"Tokens  : {tokens_per_step:,} tokens per step")
+        logger.info(f"Optim   : AdamW (LR: {train_cfg.get('learning_rate', 3e-4):.2e} | Beta2: 0.95)")
+        logger.info(f"Data    : {args.train_data.split('/')[-1]} | {train_cfg.get('max_steps', 100000):,} Max Steps")
+        logger.info(f"Compute : Float16 (Mixed Precision) | DDP no_sync")
         logger.info("="*50)
         if start_step == 0:
             logger.info(f"Starting Phase 3 Pretraining from scratch (Step 0)...")
