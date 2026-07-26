@@ -39,9 +39,8 @@ def create_dataloader(bin_path, batch_size, seq_len, is_distributed=True, is_tra
         batch_size=batch_size,
         sampler=sampler,
         shuffle=(sampler is None and is_train),
-        num_workers=4,
+        num_workers=0, # Must be 0 to prevent Kaggle /dev/shm deadlock
         pin_memory=torch.cuda.is_available(),
-        prefetch_factor=4 if torch.cuda.is_available() else None,
         drop_last=True
     )
     return loader, sampler
