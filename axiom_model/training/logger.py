@@ -32,8 +32,8 @@ class TrainingLogger:
         if lr is not None: log_str += f" | LR: {lr:.2e}"
         if profiler_stats:
             log_str += f" | Tok/s: {profiler_stats.get('tokens_per_sec', 0):.0f}"
-            if 'step_time_ms' in profiler_stats:
-                log_str += f" | Time: {profiler_stats['step_time_ms']/1000:.2f}s"
+            if 'time_sec' in profiler_stats:
+                log_str += f" | Time: {profiler_stats['time_sec']:.2f}s"
         logger.info(log_str)
         
         # Write to CSV
