@@ -35,11 +35,8 @@ class TrainingLogger:
             if 'time_sec' in profiler_stats:
                 time_sec = profiler_stats['time_sec']
                 eta_sec = (self.max_steps - step) * time_sec
-                m, s = divmod(int(eta_sec), 60)
-                h, m = divmod(m, 60)
-                d, h = divmod(h, 24)
-                eta_str = f"{d}d {h}h" if d > 0 else f"{h}h {m}m"
-                log_str += f" | Time: {time_sec:.2f}s | ETA: {eta_str}"
+                eta_hours = eta_sec / 3600
+                log_str += f" | Time: {time_sec:.2f}s | ETA: {eta_hours:.1f}h"
         logger.info(log_str)
         
         # Write to CSV
