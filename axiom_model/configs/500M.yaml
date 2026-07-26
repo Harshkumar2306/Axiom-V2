@@ -1,6 +1,6 @@
 model:
   name: "Axiom-v2-500M"
-  vocab_size: 128256     # Llama-3 tiktoken vocab size
+  vocab_size: 100277     # cl100k_base tiktoken vocab size
   max_seq_len: 4096      # Extended context window
   d_model: 1024          # Embedding dimension
   n_layers: 24           # Transformer blocks

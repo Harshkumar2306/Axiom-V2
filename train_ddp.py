@@ -6,6 +6,7 @@ import signal
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import logging
+import argparse
 
 from axiom_model.core.model import AxiomV2
 from axiom_model.training.trainer import Trainer
@@ -45,6 +46,13 @@ def cleanup():
     if dist.is_initialized():
         dist.destroy_process_group()
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Axiom V2 Pretraining')
+    parser.add_argument('--config', type=str, default='axiom_model/configs/500M.yaml', help='Path to config file')
+    parser.add_argument('--train_data', type=str, default='./data/bin/train.bin', help='Path to train.bin')
+    parser.add_argument('--val_data', type=str, default='./data/bin/val.bin', help='Path to val.bin')
+    return parser.parse_args()
+
 def main():
     global pause_requested
     signal.signal(signal.SIGINT, handle_sigint)
@@ -52,7 +60,9 @@ def main():
     rank, local_rank, world_size, is_distributed = setup()
     is_rank_zero = (rank == 0)
     
-    with open("axiom_model/configs/500M.yaml", 'r') as f:
+    args = parse_args()
+    
+    with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
         
     set_seed(config.get('training', {}).get('seed', 42) + rank)
@@ -87,14 +97,14 @@ def main():
     scheduler_mgr = SchedulerManager(optimizer, config.get('scheduler', {}))
     
     train_loader, train_sampler = create_dataloader(
-        "./data/bin/train.bin", 
+        args.train_data, 
         batch_size=train_cfg.get('batch_size', 8), 
         seq_len=model_cfg['max_seq_len'], 
         is_distributed=is_distributed, 
         is_train=True
     )
     val_loader, _ = create_dataloader(
-        "./data/bin/val.bin", 
+        args.val_data, 
         batch_size=train_cfg.get('batch_size', 8), 
         seq_len=model_cfg['max_seq_len'], 
         is_distributed=is_distributed, 
