@@ -7,9 +7,9 @@ class SchedulerManager:
         self.config = config
         self.type = config.get('type', 'sgdr')
         
-        if self.type == 'sgdr':
-            t_0 = config.get('t_0', 10000)
-            t_mult = config.get('t_mult', 2)
+        if self.type in ['sgdr', 'cosine_warm_restarts']:
+            t_0 = config.get('T_0', config.get('t_0', 10000))
+            t_mult = config.get('T_mult', config.get('t_mult', 2))
             eta_min = config.get('eta_min', 1e-5)
             self.scheduler = CosineAnnealingWarmRestarts(
                 self.optimizer, 
