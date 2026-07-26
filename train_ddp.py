@@ -182,8 +182,9 @@ def main():
             
         x, y = x.to(device), y.to(device)
         
-        if is_rank_zero:
-            trainer.profiler.start_step(x.size(0), x.size(1))
+        if is_rank_zero and (step % trainer.grad_accum_steps == 0):
+            # Only start timer on the first micro-batch of the accumulation cycle
+            trainer.profiler.start_step(x.size(0) * trainer.grad_accum_steps, x.size(1))
             
         is_last_accum = (step + 1) % trainer.grad_accum_steps == 0
         
