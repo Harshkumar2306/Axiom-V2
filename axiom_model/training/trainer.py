@@ -38,23 +38,7 @@ class Trainer:
             # Scale loss by accumulation steps so gradients are mathematically equivalent to larger batch
             loss = loss / self.grad_accum_steps
             
-        # 1. NaN/Inf Safety Trap
-        if not torch.isfinite(loss):
-            logger.error(f"[Loss Safety] Loss is {loss.item()}! Skipping batch to prevent corruption.")
-            self.optimizer.zero_grad(set_to_none=True)
-            return float('inf'), None
-            
-        # 2. Loss Spike Anomaly Trap
         scaled_loss = loss.item() * self.grad_accum_steps
-        if self._rolling_loss is None:
-            self._rolling_loss = scaled_loss
-        else:
-            if scaled_loss > self._rolling_loss * 5.0 and self._rolling_loss > 0.1:
-                logger.warning(f"[Loss Safety] Severe loss spike detected ({scaled_loss:.2f} vs rolling {self._rolling_loss:.2f}). Skipping batch.")
-                self.optimizer.zero_grad(set_to_none=True)
-                return scaled_loss, None
-            # Update rolling average smoothly
-            self._rolling_loss = 0.99 * self._rolling_loss + 0.01 * scaled_loss
             
         # Backward pass with scaler
         self.scaler.scale(loss).backward()

@@ -191,23 +191,11 @@ def main():
             
         is_last_accum = (step + 1) % trainer.grad_accum_steps == 0
         
-        try:
-            if is_distributed and not is_last_accum:
-                with model.no_sync():
-                    loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
-            else:
+        if is_distributed and not is_last_accum:
+            with model.no_sync():
                 loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
-        except RuntimeError as e:
-            if "out of memory" in str(e).lower():
-                logger.error(f"[OOM Safety] Out of memory caught on step {step}. Clearing cache and skipping batch.")
-                if torch.cuda.is_available(): torch.cuda.empty_cache()
-                elif hasattr(torch.mps, 'empty_cache'): torch.mps.empty_cache()
-                
-                # We need to manually cycle the iterator to drop the bad batch
-                if is_last_accum: optimizer.zero_grad(set_to_none=True)
-                continue
-            else:
-                raise e
+        else:
+            loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
         
         if is_last_accum:
             scheduler_mgr.step()
@@ -229,7 +217,7 @@ def main():
         if is_last_accum:
             eval_interval = train_cfg.get('eval_interval', 1000)
             if optimizer_step > 0 and optimizer_step % eval_interval == 0:
-                val_loss, val_ppl = evaluator.evaluate()
+                val_loss, val_ppl = evaluator.evaluate(num_batches=train_cfg.get('eval_iters', 100))
                 
                 if is_rank_zero:
                     train_logger.log_metrics(step, loss, val_loss=val_loss, perplexity=val_ppl)
