@@ -19,7 +19,7 @@ DATASET_MIX = {
     "tech_docs": {"repo": "togethercomputer/RedPajama-Data-1T", "name": "github", "split": "train", "weight": 0.27}, # Increased to 27% to replace gated starcoder
     "wikipedia": {"repo": "wikipedia", "name": "20220301.en", "split": "train", "weight": 0.10},
     "scientific": {"repo": "togethercomputer/RedPajama-Data-1T", "name": "arxiv", "split": "train", "weight": 0.05},
-    "books": {"repo": "togethercomputer/RedPajama-Data-1T", "name": "book", "split": "train", "weight": 0.03}
+    "books": {"repo": "roneneldan/TinyStories", "name": None, "split": "train", "weight": 0.03} # Replaced defunct Books3
 }
 
 # Because cl100k_base has 100,277 tokens, we MUST use uint32 (4 bytes per token).
