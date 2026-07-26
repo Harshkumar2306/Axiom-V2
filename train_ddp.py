@@ -207,14 +207,15 @@ def main():
         
         if is_last_accum:
             scheduler_mgr.step()
+            optimizer_step = (step + 1) // trainer.grad_accum_steps
             
         if is_rank_zero and is_last_accum:
             stats = trainer.profiler.end_step()
             stats.update(trainer.profiler.get_gpu_memory())
             
-            if step % 10 == 0:
+            if optimizer_step % 1 == 0:
                 train_logger.log_metrics(
-                    step=step, 
+                    step=optimizer_step, 
                     train_loss=loss, 
                     lr=scheduler_mgr.get_lr(), 
                     grad_norm=grad_norm,
@@ -222,7 +223,7 @@ def main():
                 )
                 
             eval_interval = train_cfg.get('eval_interval', 1000)
-            if step > 0 and step % eval_interval == 0:
+            if optimizer_step > 0 and optimizer_step % eval_interval == 0:
                 val_loss, val_ppl = evaluator.evaluate()
                 train_logger.log_metrics(step, loss, val_loss=val_loss, perplexity=val_ppl)
                 

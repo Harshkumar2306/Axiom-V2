@@ -16,8 +16,8 @@ class Trainer:
         self.is_rank_zero = is_rank_zero
         
         self.device = next(model.parameters()).device
-        self.grad_accum_steps = config.get('grad_accum_steps', 4)
-        self.clip_grad = config.get('clip_grad', 1.0)
+        self.grad_accum_steps = config.get('training', {}).get('grad_accum_steps', 4)
+        self.clip_grad = config.get('training', {}).get('clip_grad_norm', 1.0)
         
         self.scaler = torch.amp.GradScaler('cuda' if torch.cuda.is_available() else 'cpu', enabled=torch.cuda.is_available())
         self.profiler = Profiler() if is_rank_zero else None
