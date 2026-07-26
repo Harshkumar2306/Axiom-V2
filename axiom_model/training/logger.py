@@ -33,7 +33,13 @@ class TrainingLogger:
         if profiler_stats:
             log_str += f" | Tok/s: {profiler_stats.get('tokens_per_sec', 0):.0f}"
             if 'time_sec' in profiler_stats:
-                log_str += f" | Time: {profiler_stats['time_sec']:.2f}s"
+                time_sec = profiler_stats['time_sec']
+                eta_sec = (self.max_steps - step) * time_sec
+                m, s = divmod(int(eta_sec), 60)
+                h, m = divmod(m, 60)
+                d, h = divmod(h, 24)
+                eta_str = f"{d}d {h}h" if d > 0 else f"{h}h {m}m"
+                log_str += f" | Time: {time_sec:.2f}s | ETA: {eta_str}"
         logger.info(log_str)
         
         # Write to CSV
