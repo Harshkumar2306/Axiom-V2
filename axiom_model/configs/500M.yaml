@@ -16,7 +16,7 @@ training:
   grad_accum_steps: 32   # Set to 32 to maintain exact same effective batch math (64)
   clip_grad_norm: 1.0
   eval_iters: 100
-  eval_interval: 500
+  eval_interval: 100
   checkpoint_interval: 500
   learning_rate: 3.0e-4
   weight_decay: 0.1
