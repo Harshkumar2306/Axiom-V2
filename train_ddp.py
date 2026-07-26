@@ -115,7 +115,7 @@ def main():
     ckpt_mgr = CheckpointManager()
     trainer = Trainer(model, optimizer, train_loader, config, is_rank_zero)
     evaluator = Evaluator(model, val_loader, device, is_distributed, config)
-    train_logger = TrainingLogger(use_wandb=False) if is_rank_zero else None
+    train_logger = TrainingLogger(use_wandb=False, max_steps=train_cfg.get('max_steps', 100000)) if is_rank_zero else None
     
     # 4. Resume Checkpoint
     start_epoch, start_step, best_val_loss = ckpt_mgr.load(model, optimizer, scheduler_mgr, trainer.scaler)

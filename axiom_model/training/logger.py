@@ -6,9 +6,10 @@ import wandb
 logger = logging.getLogger(__name__)
 
 class TrainingLogger:
-    def __init__(self, log_dir="./logs", use_wandb=False, config=None):
+    def __init__(self, log_dir="./logs", use_wandb=False, config=None, max_steps=100000):
         self.log_dir = log_dir
         self.use_wandb = use_wandb
+        self.max_steps = max_steps
         os.makedirs(self.log_dir, exist_ok=True)
         
         self.log_file = os.path.join(self.log_dir, "train.log")
@@ -25,12 +26,14 @@ class TrainingLogger:
 
     def log_metrics(self, step, train_loss, val_loss=None, perplexity=None, lr=None, grad_norm=None, profiler_stats=None):
         # Format for terminal/log file
-        log_str = f"Step {step} | Loss: {train_loss:.4f}"
+        log_str = f"Step {step}/{self.max_steps} | Loss: {train_loss:.4f}"
         if val_loss is not None: log_str += f" | Val Loss: {val_loss:.4f}"
         if perplexity is not None: log_str += f" | PPL: {perplexity:.2f}"
         if lr is not None: log_str += f" | LR: {lr:.2e}"
         if profiler_stats:
             log_str += f" | Tok/s: {profiler_stats.get('tokens_per_sec', 0):.0f}"
+            if 'step_time_ms' in profiler_stats:
+                log_str += f" | Time: {profiler_stats['step_time_ms']/1000:.2f}s"
         logger.info(log_str)
         
         # Write to CSV
