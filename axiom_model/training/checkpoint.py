@@ -64,6 +64,20 @@ class CheckpointManager:
                 json.dump(metadata, f, indent=2)
                 
             logger.info(f"New best checkpoint saved to {best_path} (Loss: {best_val_loss:.4f})")
+            
+        # 3. Secure Epoch Milestones (Non-overwritable)
+        if step == 34000:
+            ep_path = os.path.join(self.save_dir, "Ep1.pt")
+            shutil.copyfile(latest_path, ep_path)
+            logger.info(f"🔒 Secure Milestone Reached! Saved 1 Epoch checkpoint to {ep_path}")
+        elif step == 51000:
+            ep_path = os.path.join(self.save_dir, "Ep1.5.pt")
+            shutil.copyfile(latest_path, ep_path)
+            logger.info(f"🔒 Secure Milestone Reached! Saved 1.5 Epoch checkpoint to {ep_path}")
+        elif step == 69000:
+            ep_path = os.path.join(self.save_dir, "Ep2.pt")
+            shutil.copyfile(latest_path, ep_path)
+            logger.info(f"🔒 Secure Milestone Reached! Saved 2 Epoch checkpoint to {ep_path}")
 
     def load(self, model, optimizer, scheduler, scaler, path="./checkpoints/latest.pt"):
         if not os.path.exists(path):
