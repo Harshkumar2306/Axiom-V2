@@ -227,7 +227,7 @@ def main():
                 )
                 
             eval_interval = train_cfg.get('eval_interval', 1000)
-            if optimizer_step > 0 and optimizer_step % eval_interval == 0:
+            if optimizer_step > 0 and (optimizer_step % eval_interval == 0 or optimizer_step in [35000, 52500, 70000]):
                 val_loss, val_ppl = evaluator.evaluate()
                 train_logger.log_metrics(step, loss, val_loss=val_loss, perplexity=val_ppl)
                 
