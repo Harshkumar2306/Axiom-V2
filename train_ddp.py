@@ -226,15 +226,19 @@ def main():
                     profiler_stats=stats
                 )
                 
+        if is_last_accum:
             eval_interval = train_cfg.get('eval_interval', 1000)
             if optimizer_step > 0 and optimizer_step % eval_interval == 0:
                 val_loss, val_ppl = evaluator.evaluate()
-                train_logger.log_metrics(step, loss, val_loss=val_loss, perplexity=val_ppl)
+                
+                if is_rank_zero:
+                    train_logger.log_metrics(step, loss, val_loss=val_loss, perplexity=val_ppl)
                 
                 is_best = val_loss < best_val_loss
                 if is_best: best_val_loss = val_loss
                 
-                ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=is_best)
+                if is_rank_zero:
+                    ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=is_best)
                 
         # Graceful Pause Exit
         if pause_requested and is_last_accum:
