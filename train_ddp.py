@@ -188,7 +188,11 @@ def main():
         is_last_accum = (step + 1) % trainer.grad_accum_steps == 0
         
         try:
-            loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
+            if is_distributed and not is_last_accum:
+                with model.no_sync():
+                    loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
+            else:
+                loss, grad_norm = trainer.train_step(x, y, is_last_accum_step=is_last_accum)
         except RuntimeError as e:
             if "out of memory" in str(e).lower():
                 logger.error(f"[OOM Safety] Out of memory caught on step {step}. Clearing cache and skipping batch.")
