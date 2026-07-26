@@ -1,7 +1,7 @@
 model:
   name: "Axiom-v2-500M"
   vocab_size: 100277     # cl100k_base tiktoken vocab size
-  max_seq_len: 4096      # Extended context window
+  max_seq_len: 2048      # Reduced from 4096 to prevent Logits VRAM overflow on T4
   d_model: 1024          # Embedding dimension
   n_layers: 24           # Transformer blocks
   n_heads: 16            # Query heads
@@ -12,8 +12,8 @@ model:
   rope_theta: 500000.0   # RoPE base theta for long context
 
 training:
-  batch_size: 1          # Dropped to 1 to fix the 4096-seq_len Logits bottleneck
-  grad_accum_steps: 32   # Increased to 32 to maintain the exact same math
+  batch_size: 2          # Safely increased back to 2 since seq_len is halved
+  grad_accum_steps: 16   # Maintained exact same effective batch math (64)
   clip_grad_norm: 1.0
   validation_batches: 100
   eval_interval: 500
