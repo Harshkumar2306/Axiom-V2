@@ -26,6 +26,6 @@ training:
 
 scheduler:
   type: "cosine_warm_restarts"
-  T_0: 10000
+  T_0: 5000
   T_mult: 2
   eta_min: 1.0e-5
