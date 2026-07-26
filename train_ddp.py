@@ -57,9 +57,6 @@ def main():
     global pause_requested
     signal.signal(signal.SIGINT, handle_sigint)
     
-    # Enable cuDNN auto-tuner for free speedup on static input sizes
-    torch.backends.cudnn.benchmark = True
-    
     rank, local_rank, world_size, is_distributed = setup()
     is_rank_zero = (rank == 0)
     
