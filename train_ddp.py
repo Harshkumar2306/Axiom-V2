@@ -122,7 +122,20 @@ def main():
     
     # 5. Train Loop
     if is_rank_zero:
+        total_params = sum(p.numel() for p in model.parameters()) / 1e6
+        effective_batch = train_cfg.get('batch_size', 2) * config.get('training', {}).get('grad_accum_steps', 16) * world_size
+        tokens_per_step = effective_batch * model_cfg['max_seq_len']
+        logger.info("\n" + "="*50)
+        logger.info(f"🚀 AXIOM V2 ENGINE IGNITION")
+        logger.info("="*50)
+        logger.info(f"Model   : {total_params:.1f} Million Parameters")
+        logger.info(f"Vocab   : {model_cfg['vocab_size']} (cl100k_base)")
+        logger.info(f"Context : {model_cfg['max_seq_len']} Tokens")
+        logger.info(f"Math    : Batch {train_cfg.get('batch_size', 2)} x {config.get('training', {}).get('grad_accum_steps', 16)} Accum x {world_size} GPUs = {effective_batch} Effective Batch")
+        logger.info(f"Tokens  : {tokens_per_step:,} tokens per step")
+        logger.info("="*50)
         logger.info(f"Starting Phase 3 Pretraining from step {start_step}...")
+        logger.info("="*50 + "\n")
         
     if train_sampler:
         train_sampler.set_epoch(start_epoch)
