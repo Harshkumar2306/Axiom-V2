@@ -1,11 +1,11 @@
 model:
-  name: "Axiom-v2-500M"
+  name: "Axiom-v2-501M"
   vocab_size: 100277     # cl100k_base tiktoken vocab size
   max_seq_len: 2048      # Reduced from 4096 to prevent Logits VRAM overflow on T4
   d_model: 1024          # Embedding dimension
-  n_layers: 24           # Transformer blocks
+  n_layers: 23           # 23 Layers with Standard MHA
   n_heads: 16            # Query heads
-  n_kv_heads: 4          # GQA ratio (4:1)
+  n_kv_heads: 16         # Standard MHA (No GQA) to hit exactly 501M params
   multiple_of: 256       # SwiGLU hidden dim rounding
   ffn_dim_multiplier: null
   norm_eps: 1.0e-5       # RMSNorm epsilon

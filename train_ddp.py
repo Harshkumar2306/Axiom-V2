@@ -17,7 +17,7 @@ from axiom_model.training.logger import TrainingLogger
 from axiom_model.training.scheduler import SchedulerManager
 from axiom_model.utils.reproducibility import set_seed
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
 # Global flag for graceful exit
