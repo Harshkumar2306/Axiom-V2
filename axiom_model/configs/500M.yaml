@@ -12,8 +12,8 @@ model:
   rope_theta: 500000.0   # RoPE base theta for long context
 
 training:
-  batch_size: 2          # Lowered to prevent OOM on 16GB T4 GPUs
-  grad_accum_steps: 16   # Increased to maintain effective batch math
+  batch_size: 1          # Dropped to 1 to fix the 4096-seq_len Logits bottleneck
+  grad_accum_steps: 32   # Increased to 32 to maintain the exact same math
   clip_grad_norm: 1.0
   validation_batches: 100
   eval_interval: 500
