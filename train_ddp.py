@@ -126,7 +126,10 @@ def main():
         effective_batch = train_cfg.get('batch_size', 2) * config.get('training', {}).get('grad_accum_steps', 16) * world_size
         tokens_per_step = effective_batch * model_cfg['max_seq_len']
         logger.info("\n" + "="*50)
-        logger.info(f"🚀 AXIOM V2 ENGINE IGNITION")
+        if start_step == 0:
+            logger.info(f"🚀 AXIOM V2 ENGINE IGNITION")
+        else:
+            logger.info(f"🔄 AXIOM V2 RESUME SEQUENCE INITIATED")
         logger.info("="*50)
         logger.info(f"Model   : {total_params:.1f} Million Parameters")
         logger.info(f"Vocab   : {model_cfg['vocab_size']} (cl100k_base)")
@@ -134,7 +137,14 @@ def main():
         logger.info(f"Math    : Batch {train_cfg.get('batch_size', 2)} x {config.get('training', {}).get('grad_accum_steps', 16)} Accum x {world_size} GPUs = {effective_batch} Effective Batch")
         logger.info(f"Tokens  : {tokens_per_step:,} tokens per step")
         logger.info("="*50)
-        logger.info(f"Starting Phase 3 Pretraining from step {start_step}...")
+        if start_step == 0:
+            logger.info(f"Starting Phase 3 Pretraining from scratch (Step 0)...")
+        else:
+            logger.info(f"Resuming from Checkpoint:")
+            logger.info(f" -> Epoch        : {start_epoch}")
+            logger.info(f" -> Global Step  : {start_step:,}")
+            logger.info(f" -> Best Val Loss: {best_val_loss:.4f}")
+            logger.info(f" -> Datastream   : Fast-forwarding {start_step:,} batches...")
         logger.info("="*50 + "\n")
         
     if train_sampler:
