@@ -114,7 +114,7 @@ def main():
     # 3. Setup Managers
     ckpt_mgr = CheckpointManager()
     trainer = Trainer(model, optimizer, train_loader, config, is_rank_zero)
-    evaluator = Evaluator(model, val_loader, device, is_distributed)
+    evaluator = Evaluator(model, val_loader, device, is_distributed, config)
     train_logger = TrainingLogger(use_wandb=False) if is_rank_zero else None
     
     # 4. Resume Checkpoint

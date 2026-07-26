@@ -24,9 +24,15 @@ class Trainer:
         
         self._rolling_loss = None
         
+    def _get_torch_dtype(self):
+        d = self.config.get('training', {}).get('dtype', 'float16') if 'training' in self.config else self.config.get('dtype', 'float16')
+        if d == 'bfloat16': return torch.bfloat16
+        if d == 'float32': return torch.float32
+        return torch.float16
+        
     def train_step(self, x, y, is_last_accum_step=True):
         # Mixed Precision
-        with torch.autocast(device_type=self.device.type, dtype=torch.float16 if self.device.type == 'cuda' else torch.bfloat16):
+        with torch.autocast(device_type=self.device.type, dtype=self._get_torch_dtype()):
             logits = self.model(x)
             loss = MetricsCalculator.compute_loss(logits, y)
             # Scale loss by accumulation steps so gradients are mathematically equivalent to larger batch

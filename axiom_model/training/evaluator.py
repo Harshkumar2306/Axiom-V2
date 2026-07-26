@@ -3,11 +3,12 @@ import torch.distributed as dist
 from .metrics import MetricsCalculator
 
 class Evaluator:
-    def __init__(self, model, val_loader, device, is_distributed=True):
+    def __init__(self, model, val_loader, device, is_distributed=True, config=None):
         self.model = model
         self.val_loader = val_loader
         self.device = device
         self.is_distributed = is_distributed
+        self.config = config or {}
         
     @torch.no_grad()
     def evaluate(self, num_batches=100):
@@ -27,7 +28,9 @@ class Evaluator:
             
             # Mixed precision context for evaluation if available
             if torch.cuda.is_available():
-                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                d_str = self.config.get('training', {}).get('dtype', 'float16') if 'training' in self.config else self.config.get('dtype', 'float16')
+                dt = torch.bfloat16 if d_str == 'bfloat16' else (torch.float32 if d_str == 'float32' else torch.float16)
+                with torch.autocast(device_type="cuda", dtype=dt):
                     logits = self.model(x)
                     loss = MetricsCalculator.compute_loss(logits, y)
             else:
