@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import subprocess
 import yaml
-from datetime import datetime
+from datetime import datetime, timezone
 
 def set_seed(seed: int = 42):
     """Hardcode strict reproducibility across all RNGs."""
@@ -25,7 +25,8 @@ def capture_environment_snapshot(config_path: str, save_dir: str):
     """Automatically save Git hash, CUDA versions, and configs to make experiments reproducible."""
     os.makedirs(save_dir, exist_ok=True)
     snapshot = {
-        "timestamp": datetime.utcnow().isoformat(),
+        # datetime.utcnow() is deprecated since Python 3.12
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "git_commit": "",
         "pytorch_version": torch.__version__,
         "cuda_available": torch.cuda.is_available(),

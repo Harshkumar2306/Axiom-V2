@@ -23,9 +23,21 @@ training:
   max_steps: 35000       # 1 Epoch (4.5 Billion tokens) for the 4.5B dataset
   dtype: "float16"       # T4 preference
   seed: 42               # Deterministic training seed
+  gradient_checkpointing: true   # Trades ~30% compute for ~50% activation memory
+  compile: false         # torch.compile() — enable on A100/H100 for max throughput
 
 scheduler:
   type: "cosine_warm_restarts"
   T_0: 5000
   T_mult: 2
   eta_min: 1.0e-5
+
+# Phase 4 — Supervised Fine-Tuning (train_sft.py)
+sft:
+  data_path: "./dataset/sft/sft_data.pt"
+  learning_rate: 2.0e-5  # ~10x smaller than pretraining LR
+  max_steps: 500         # optimizer steps (not micro-batches)
+  eval_interval: 50      # optimizer steps between evals
+  log_interval: 10
+  eval_iters: 50
+  eta_min: 1.0e-6

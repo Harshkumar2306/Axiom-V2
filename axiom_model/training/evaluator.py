@@ -24,13 +24,15 @@ class Evaluator:
             except StopIteration:
                 break
                 
-            x, y = x.to(self.device), y.to(self.device)
-            
-            # Mixed precision context for evaluation if available
-            if torch.cuda.is_available():
+            x = x.to(self.device, non_blocking=True)
+            y = y.to(self.device, non_blocking=True)
+
+            # Mixed precision context for evaluation if available.
+            # (Autocast is CUDA/MPS-only; CPU evaluates in fp32.)
+            if self.device.type in ('cuda', 'mps'):
                 d_str = self.config.get('training', {}).get('dtype', 'float16') if 'training' in self.config else self.config.get('dtype', 'float16')
                 dt = torch.bfloat16 if d_str == 'bfloat16' else (torch.float32 if d_str == 'float32' else torch.float16)
-                with torch.autocast(device_type="cuda", dtype=dt):
+                with torch.autocast(device_type=self.device.type, dtype=dt):
                     logits = self.model(x)
                     loss = MetricsCalculator.compute_loss(logits, y)
             else:

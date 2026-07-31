@@ -41,9 +41,24 @@ class AxiomV2(nn.Module):
         self.norm = RMSNorm(d_model, eps=norm_eps)
         self.output = nn.Linear(d_model, vocab_size, bias=False)
 
-        self.freqs_cis = precompute_freqs_cis(d_model // n_heads, max_seq_len * 2, theta=rope_theta)
+        # Registered as a non-persistent buffer: it follows .to(device) moves
+        # automatically (no per-forward device copy) but stays out of the
+        # state_dict, keeping checkpoints small and load-compatible.
+        self.register_buffer(
+            "freqs_cis",
+            precompute_freqs_cis(d_model // n_heads, max_seq_len * 2, theta=rope_theta),
+            persistent=False,
+        )
 
         self.apply(self._init_weights)
+
+        # GPT-style scaled init for residual-branch projections (attention wo,
+        # FFN w2): keeps residual-stream variance ~constant as depth grows,
+        # which noticeably stabilises early training of deep networks.
+        residual_std = 0.02 / math.sqrt(2 * n_layers)
+        for name, param in self.named_parameters():
+            if name.endswith(("wo.weight", "w2.weight")):
+                torch.nn.init.normal_(param, mean=0.0, std=residual_std)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -56,7 +71,8 @@ class AxiomV2(nn.Module):
     def forward(self, tokens: torch.Tensor):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
-        freqs_cis = self.freqs_cis[:seqlen].to(h.device)
+        # Buffer already lives on the model's device; slicing is a view (no copy).
+        freqs_cis = self.freqs_cis[:seqlen]
 
         for layer in self.layers:
             if self.gradient_checkpointing and self.training:

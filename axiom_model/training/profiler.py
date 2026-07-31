@@ -11,6 +11,9 @@ class Profiler:
         self.batch_tokens = batch_size * seq_len
         
     def end_step(self):
+        if self.step_start_time is None:
+            # start_step was never called (e.g. resumed mid-accumulation window)
+            return {"time_sec": 0.0, "tokens_per_sec": 0.0, "examples_per_sec": 0.0}
         elapsed = time.time() - self.step_start_time
         tokens_per_sec = self.batch_tokens / elapsed if elapsed > 0 else 0
         examples_per_sec = (self.batch_tokens / 4096) / elapsed if elapsed > 0 else 0

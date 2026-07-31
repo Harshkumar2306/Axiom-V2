@@ -2,6 +2,10 @@ import os
 import csv
 import logging
 
+# wandb is imported lazily inside TrainingLogger so that environments without
+# it installed can still train with use_wandb=False.
+wandb = None
+
 logger = logging.getLogger(__name__)
 
 class TrainingLogger:
@@ -21,11 +25,10 @@ class TrainingLogger:
                 writer.writerow(["step", "train_loss", "val_loss", "perplexity", "lr", "grad_norm", "tokens_per_sec", "gpu_allocated_gb"])
         
         if self.use_wandb:
-            import wandb
-            self._wandb = wandb
+            global wandb
+            import wandb as _wandb
+            wandb = _wandb
             wandb.init(project="axiom-v2", config=config)
-        else:
-            self._wandb = None
 
     def log_metrics(self, step, train_loss, val_loss=None, perplexity=None, lr=None, grad_norm=None, profiler_stats=None):
         # Format for terminal/log file
@@ -66,8 +69,8 @@ class TrainingLogger:
             if profiler_stats:
                 metrics["perf/tokens_per_sec"] = profiler_stats.get('tokens_per_sec', 0)
                 metrics["perf/gpu_allocated_gb"] = profiler_stats.get('allocated_gb', 0)
-            self._wandb.log(metrics, step=step)
+            wandb.log(metrics, step=step)
 
     def close(self):
         if self.use_wandb:
-            self._wandb.finish()
+            wandb.finish()

@@ -14,11 +14,12 @@ class CheckpointManager:
         os.makedirs(self.save_dir, exist_ok=True)
 
     def save(self, model, optimizer, scheduler, scaler, epoch, step, best_val_loss, config, is_best=False):
-        # 1. Safety Check: Verify at least 5GB of free disk space before saving to prevent corruption
+        # 1. Safety Check: Verify free disk space before saving to prevent
+        # corruption. A full 500M checkpoint (fp32 weights + AdamW m/v) is ~6 GB.
         try:
             stat = shutil.disk_usage(self.save_dir)
             free_gb = stat.free / (1024 ** 3)
-            if free_gb < 5.0:
+            if free_gb < 8.0:
                 logger.error(f"[Disk Safety] Only {free_gb:.2f} GB free. Aborting checkpoint save to prevent corruption.")
                 return
         except Exception as e:
@@ -47,17 +48,6 @@ class CheckpointManager:
         
         logger.info(f"Checkpoint saved to {latest_path} (step {step})")
         
-        # Save latest metadata
-        import json
-        latest_meta = {
-            "step": step,
-            "epoch": epoch,
-            "val_loss": best_val_loss,
-            "perplexity": math.exp(best_val_loss) if best_val_loss < 100 else float('inf')
-        }
-        with open(os.path.join(self.save_dir, "latest_metadata.json"), 'w') as f:
-            json.dump(latest_meta, f, indent=2)
-            
         if is_best:
             best_path = os.path.join(self.save_dir, "best.pt")
             shutil.copyfile(latest_path, best_path)
@@ -82,7 +72,14 @@ class CheckpointManager:
             return 0, 0, float('inf')
             
         logger.info(f"Loading checkpoint from {path}...")
-        state = torch.load(path, map_location='cpu', weights_only=False)
+        # weights_only=False is required: the checkpoint embeds numpy RNG state
+        # (ndarrays), which the torch>=2.6 default weights_only=True refuses to
+        # unpickle. The file is self-produced and trusted, so this is safe.
+        try:
+            state = torch.load(path, map_location='cpu', weights_only=False)
+        except TypeError:
+            # Very old torch without the weights_only argument
+            state = torch.load(path, map_location='cpu')
         
         if hasattr(model, 'module'):
             model.module.load_state_dict(state['model'])

@@ -9,3 +9,4 @@ wandb
 datasets
 tiktoken
 datasketch
+kaggle          # data_pipeline/03_upload_to_kaggle.py

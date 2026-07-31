@@ -27,6 +27,27 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
     shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
     return freqs_cis.view(*shape)
 
+def _sdpa_supports_enable_gqa() -> bool:
+    """F.scaled_dot_product_attention gained native GQA support in PyTorch 2.5.
+
+    Detection strategy: parse the torch version first (cheap), and if that is
+    inconclusive, run a tiny functional probe — some builds (e.g. CPU wheels)
+    expose SDPA as a C builtin with no introspectable Python signature.
+    """
+    try:
+        major, minor = (int(p) for p in torch.__version__.split('+')[0].split('.')[:2])
+        return (major, minor) >= (2, 5)
+    except (ValueError, AttributeError):
+        pass
+    try:
+        q = torch.randn(1, 2, 4, 8)
+        k = torch.randn(1, 1, 4, 8)
+        v = torch.randn(1, 1, 4, 8)
+        F.scaled_dot_product_attention(q, k, v, enable_gqa=True)
+        return True
+    except Exception:
+        return False
+
 class Attention(nn.Module):
     """Grouped-Query Attention with FlashAttention-2 Fallback"""
     def __init__(self, dim: int, n_heads: int, n_kv_heads: int):
@@ -40,9 +61,16 @@ class Attention(nn.Module):
         self.wv = nn.Linear(dim, n_kv_heads * self.head_dim, bias=False)
         self.wo = nn.Linear(n_heads * self.head_dim, dim, bias=False)
 
+        # Native GQA (PyTorch >= 2.5) lets SDPA expand K/V internally, so we
+        # never materialise the repeated K/V heads -> less memory traffic.
+        # Older versions fall back to an explicit repeat_interleave.
+        self._use_native_gqa = (
+            n_kv_heads != n_heads and _sdpa_supports_enable_gqa()
+        )
+
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor):
         bsz, seqlen, _ = x.shape
-        
+
         xq = self.wq(x)
         xk = self.wk(x)
         xv = self.wv(x)
@@ -53,11 +81,12 @@ class Attention(nn.Module):
 
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
-        # GQA repeat
-        num_key_value_groups = self.n_heads // self.n_kv_heads
-        if num_key_value_groups > 1:
-            xk = xk.repeat_interleave(num_key_value_groups, dim=2)
-            xv = xv.repeat_interleave(num_key_value_groups, dim=2)
+        if not self._use_native_gqa:
+            # GQA repeat (fallback for PyTorch < 2.5)
+            num_key_value_groups = self.n_heads // self.n_kv_heads
+            if num_key_value_groups > 1:
+                xk = xk.repeat_interleave(num_key_value_groups, dim=2)
+                xv = xv.repeat_interleave(num_key_value_groups, dim=2)
 
         xq = xq.transpose(1, 2)
         xk = xk.transpose(1, 2)
@@ -65,7 +94,10 @@ class Attention(nn.Module):
 
         # FlashAttention-2 Fallback
         # PyTorch 2.x will automatically use FlashAttention-2 if available when using scaled_dot_product_attention
-        output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
-        
+        if self._use_native_gqa:
+            output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True, enable_gqa=True)
+        else:
+            output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=True)
+
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         return self.wo(output)

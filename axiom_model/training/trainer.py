@@ -18,19 +18,37 @@ class Trainer:
         self.device = next(model.parameters()).device
         self.grad_accum_steps = config.get('training', {}).get('grad_accum_steps', 4)
         self.clip_grad = config.get('training', {}).get('clip_grad_norm', 1.0)
-        
-        self.scaler = torch.amp.GradScaler('cuda' if torch.cuda.is_available() else 'cpu', enabled=torch.cuda.is_available())
+
+        self.amp_dtype = self._get_torch_dtype()
+        # Gradient scaling is only needed — and only functional — for fp16 on
+        # CUDA. bf16 has fp32-like dynamic range so scaling is a no-op there,
+        # and CPU/MPS do not support GradScaler at all.
+        scaler_enabled = (self.device.type == 'cuda' and self.amp_dtype == torch.float16)
+        self.scaler = torch.amp.GradScaler(
+            'cuda' if self.device.type == 'cuda' else 'cpu',
+            enabled=scaler_enabled
+        )
         self.profiler = Profiler() if is_rank_zero else None
-        
+
+        self._rolling_loss = None
+
     def _get_torch_dtype(self):
         d = self.config.get('training', {}).get('dtype', 'float16') if 'training' in self.config else self.config.get('dtype', 'float16')
-        if d == 'bfloat16': return torch.bfloat16
-        if d == 'float32': return torch.float32
-        return torch.float16
-        
+        if d == 'bfloat16':
+            dtype = torch.bfloat16
+        elif d == 'float32':
+            dtype = torch.float32
+        else:
+            dtype = torch.float16
+        # CPU autocast does not support float16 — promote to bfloat16 so the
+        # same config can run smoke tests on CPU-only machines.
+        if self.device.type == 'cpu' and dtype == torch.float16:
+            dtype = torch.bfloat16
+        return dtype
+
     def train_step(self, x, y, is_last_accum_step=True):
         # Mixed Precision
-        with torch.autocast(device_type=self.device.type, dtype=self._get_torch_dtype()):
+        with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype):
             logits = self.model(x)
             loss = MetricsCalculator.compute_loss(logits, y)
             # Scale loss by accumulation steps so gradients are mathematically equivalent to larger batch

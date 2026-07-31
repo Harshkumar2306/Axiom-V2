@@ -1,6 +1,7 @@
 import os
 import torch
 import tiktoken
+import yaml
 from datasets import load_dataset
 from tqdm import tqdm
 import logging
@@ -10,7 +11,21 @@ logger = logging.getLogger(__name__)
 
 # Standard PyTorch ignore index for F.cross_entropy
 IGNORE_INDEX = -100
-MAX_SEQ_LEN = 4096
+
+def _load_max_seq_len() -> int:
+    """Read max_seq_len from the model config so SFT sequences match the engine.
+
+    Padding to 4096 while the model trains at 2048 wastes ~4x compute and
+    risks a logits OOM on T4-class GPUs (B x T x 100k vocab)."""
+    config_path = os.path.join(os.path.dirname(__file__), "..", "axiom_model", "configs", "500M.yaml")
+    try:
+        with open(config_path, 'r') as f:
+            return int(yaml.safe_load(f)['model']['max_seq_len'])
+    except Exception as e:
+        logger.warning(f"Could not read max_seq_len from config ({e}); falling back to 2048.")
+        return 2048
+
+MAX_SEQ_LEN = _load_max_seq_len()
 
 def format_chatml(conversations):
     """

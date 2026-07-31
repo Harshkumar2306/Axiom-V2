@@ -17,8 +17,10 @@ class MemmapDataset(Dataset):
             self.data = np.memmap(self.bin_path, dtype=np.uint32, mode='r')
 
     def __len__(self):
-        # subtract seq_len to avoid out of bounds
-        return (self._len - self.seq_len - 1) // self.seq_len
+        # Valid windows need start + seq_len + 1 <= _len, i.e.
+        # idx * seq_len + seq_len + 1 <= _len  =>  idx < (_len - 1) / seq_len.
+        # (The previous formula dropped one valid sample per dataset.)
+        return max(0, (self._len - 1) // self.seq_len)
 
     def __getitem__(self, idx):
         self._lazy_init()

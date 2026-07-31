@@ -35,11 +35,13 @@ def generate_manifest(dataset_dir: str, version: str = "v1"):
         "created_at": datetime.now().isoformat(),
         "tokenizer": "cl100k_base",
         "tokenizer_vocab_size": 100277,
+        # Sources must mirror DATASET_MIX in 01_stream_and_pack.py exactly.
         "sources": {
-            "fineweb_edu": "HuggingFaceFW/fineweb-edu",
-            "starcoder": "bigcode/starcoderdata",
-            "wikipedia": "wikipedia 20220301.en",
-            "redpajama": "togethercomputer/RedPajama-Data-1T"
+            "fineweb_edu": "HuggingFaceFW/fineweb-edu (sample-10BT)",
+            "tech_docs": "togethercomputer/RedPajama-Data-1T (github)",
+            "wikipedia": "wikimedia/wikipedia (20231101.en)",
+            "scientific": "togethercomputer/RedPajama-Data-1T (arxiv)",
+            "books": "roneneldan/TinyStories"
         },
         "train_tokens": train_tokens,
         "validation_tokens": val_tokens,

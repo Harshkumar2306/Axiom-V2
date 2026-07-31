@@ -30,9 +30,10 @@ def create_sft_dataloader(data_path, batch_size, is_distributed=True, is_train=T
         batch_size=batch_size,
         sampler=sampler,
         shuffle=(sampler is None and is_train),
-        num_workers=4,
+        # The whole SFT tensor already lives in RAM, so worker processes only
+        # duplicate it (and can deadlock on Kaggle's small /dev/shm).
+        num_workers=0,
         pin_memory=torch.cuda.is_available(),
-        prefetch_factor=4 if torch.cuda.is_available() else None,
         drop_last=True
     )
     return loader, sampler

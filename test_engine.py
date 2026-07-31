@@ -10,16 +10,28 @@ logger = logging.getLogger(__name__)
 def test_engine():
     logger.info("Starting Engine Validation...")
     set_seed(42)
-    
+
     # Load config
     with open("axiom_model/configs/500M.yaml", 'r') as f:
         config = yaml.safe_load(f)
-    
+
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     logger.info(f"Using device: {device}")
-    
+
     model_cfg = config['model']
-    
+
+    # On CPU-only machines the full 476M model exhausts RAM during the backward
+    # pass (weights + grads + Adam states). Engine *correctness* does not depend
+    # on scale, so validate with an identical tiny architecture on CPU.
+    if device.type == "cpu":
+        model_cfg = dict(model_cfg)
+        model_cfg.update({
+            "vocab_size": 512, "d_model": 128, "n_layers": 3,
+            "n_heads": 4, "n_kv_heads": 2, "max_seq_len": 128,
+            "multiple_of": 32,
+        })
+        logger.info("CPU detected: validating with a tiny equivalent architecture (same components, scaled down).")
+
     # 1. Model Instantiation
     try:
         model = AxiomV2(
@@ -74,8 +86,18 @@ def test_engine():
 
     # 5. Mixed Precision
     try:
-        scaler = torch.amp.GradScaler('cuda' if torch.cuda.is_available() else 'cpu', enabled=torch.cuda.is_available())
-        with torch.autocast(device_type=device.type, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
+        # CPU autocast only supports bfloat16; fp16 there raises at runtime.
+        if device.type == 'cuda':
+            amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        elif device.type == 'mps':
+            amp_dtype = torch.float16
+        else:
+            amp_dtype = torch.bfloat16
+        scaler = torch.amp.GradScaler(
+            'cuda' if device.type == 'cuda' else 'cpu',
+            enabled=(device.type == 'cuda' and amp_dtype == torch.float16)
+        )
+        with torch.autocast(device_type=device.type, dtype=amp_dtype):
             outputs_amp = model(dummy_input)
             loss_amp = outputs_amp.mean()
         logger.info("✓ Mixed precision verified")

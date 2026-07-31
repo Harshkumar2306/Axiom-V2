@@ -12,8 +12,13 @@ class RMSNorm(nn.Module):
     def forward(self, x):
         # In a real environment with Triton/xFormers, you would call a fused kernel here.
         # E.g. from xformers.ops.fmha.attn_bias import ...
-        output = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        return output * self.weight
+        # IMPORTANT: compute the normalisation statistics in float32. In fp16
+        # the sum of squares can overflow to inf (activations grow with depth),
+        # which silently turns rsqrt(inf) into 0 and NaNs the whole run.
+        input_dtype = x.dtype
+        x32 = x.float()
+        normed = x32 * torch.rsqrt(x32.pow(2).mean(-1, keepdim=True) + self.eps)
+        return (normed * self.weight.float()).to(input_dtype)
 
 class SwiGLU(nn.Module):
     """Swish-Gated Linear Unit (with Fused potential)."""
