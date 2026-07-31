@@ -47,6 +47,17 @@ class CheckpointManager:
         
         logger.info(f"Checkpoint saved to {latest_path} (step {step})")
         
+        # Save latest metadata
+        import json
+        latest_meta = {
+            "step": step,
+            "epoch": epoch,
+            "val_loss": best_val_loss,
+            "perplexity": math.exp(best_val_loss) if best_val_loss < 100 else float('inf')
+        }
+        with open(os.path.join(self.save_dir, "latest_metadata.json"), 'w') as f:
+            json.dump(latest_meta, f, indent=2)
+            
         if is_best:
             best_path = os.path.join(self.save_dir, "best.pt")
             shutil.copyfile(latest_path, best_path)
