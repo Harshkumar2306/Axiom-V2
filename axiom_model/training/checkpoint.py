@@ -82,7 +82,7 @@ class CheckpointManager:
             return 0, 0, float('inf')
             
         logger.info(f"Loading checkpoint from {path}...")
-        state = torch.load(path, map_location='cpu')
+        state = torch.load(path, map_location='cpu', weights_only=False)
         
         if hasattr(model, 'module'):
             model.module.load_state_dict(state['model'])
