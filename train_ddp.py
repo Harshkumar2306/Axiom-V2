@@ -167,13 +167,16 @@ def main():
                 train_iter = iter(train_loader)
                 next(train_iter)
                 
-    for step in range(start_step, train_cfg.get('max_steps', 100000)):
+    max_opt_steps = train_cfg.get('max_steps', 100000)
+    max_micro_steps = max_opt_steps * config.get('training', {}).get('grad_accum_steps', 16)
+    
+    for step in range(start_step, max_micro_steps):
         
         # Check for pause file
         if os.path.exists("pause.flag"):
-            if is_rank_zero: logger.info("\n[Graceful Exit] 'pause.flag' detected. Initiating pause sequence...")
+            if is_rank_zero and not pause_requested: 
+                logger.info("\n[Graceful Exit] 'pause.flag' detected. Initiating pause sequence...")
             pause_requested = True
-            os.remove("pause.flag")
             
         try:
             x, y = next(train_iter)
@@ -234,6 +237,9 @@ def main():
                 logger.info(f"Saving paused checkpoint at step {step}...")
                 ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=False)
                 train_logger.close()
+                if os.path.exists("pause.flag"):
+                    try: os.remove("pause.flag")
+                    except: pass
             cleanup()
             sys.exit(0)
                 
