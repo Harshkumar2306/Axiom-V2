@@ -68,6 +68,13 @@ def main():
     set_seed(config.get('training', {}).get('seed', 42) + rank)
     
     device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+
+    # TF32 matmuls: free throughput on Ampere+ GPUs (harmless no-op on T4/CPU).
+    if device.type == 'cuda':
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
+    train_cfg = config.get('training', {})
     
     # 1. Build Model
     model_cfg = config['model']
@@ -81,18 +88,24 @@ def main():
         multiple_of=model_cfg['multiple_of'],
         norm_eps=model_cfg['norm_eps'],
         rope_theta=model_cfg['rope_theta'],
-        gradient_checkpointing=True
+        gradient_checkpointing=train_cfg.get('gradient_checkpointing', True)
     ).to(device)
+
+    # Optional torch.compile (before the DDP wrap, per PyTorch guidance).
+    if train_cfg.get('compile', False) and hasattr(torch, 'compile') and device.type == 'cuda':
+        if is_rank_zero: logger.info("Compiling model with torch.compile()...")
+        model = torch.compile(model)
     
     if is_distributed:
         model = DDP(model, device_ids=[local_rank])
         
     # 2. Build Optimizer & Dataloaders
-    train_cfg = config.get('training', {})
+    # fused=True offloads the AdamW update to a single fused CUDA kernel — a solid, free speedup.
     optimizer = torch.optim.AdamW(
         model.parameters(), 
         lr=float(train_cfg.get('learning_rate', 3e-4)), 
-        weight_decay=train_cfg.get('weight_decay', 0.1)
+        weight_decay=train_cfg.get('weight_decay', 0.1),
+        fused=(device.type == 'cuda')
     )
     scheduler_mgr = SchedulerManager(optimizer, config.get('scheduler', {}))
     
