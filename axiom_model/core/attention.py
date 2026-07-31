@@ -61,12 +61,11 @@ class Attention(nn.Module):
         self.wv = nn.Linear(dim, n_kv_heads * self.head_dim, bias=False)
         self.wo = nn.Linear(n_heads * self.head_dim, dim, bias=False)
 
-        # Native GQA (PyTorch >= 2.5) lets SDPA expand K/V internally, so we
-        # never materialise the repeated K/V heads -> less memory traffic.
-        # Older versions fall back to an explicit repeat_interleave.
-        self._use_native_gqa = (
-            n_kv_heads != n_heads and _sdpa_supports_enable_gqa()
-        )
+        # Native GQA (PyTorch >= 2.5) lets SDPA expand K/V internally, but
+        # on T4 GPUs (compute capability 7.5), Memory Efficient Attention does
+        # not support asymmetric K/V shapes, forcing a slow Math fallback.
+        # We disable it here to restore the 3x speedup via manual repeat_interleave.
+        self._use_native_gqa = False
 
     def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor):
         bsz, seqlen, _ = x.shape
