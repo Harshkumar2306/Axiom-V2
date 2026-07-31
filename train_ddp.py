@@ -130,6 +130,12 @@ def main():
         total_params = sum(p.numel() for p in model.parameters()) / 1e6
         effective_batch = train_cfg.get('batch_size', 2) * config.get('training', {}).get('grad_accum_steps', 16) * world_size
         tokens_per_step = effective_batch * model_cfg['max_seq_len']
+        
+        try:
+            total_dataset_tokens = os.path.getsize(args.train_data) // 4
+            dataset_str = f"{args.train_data.split('/')[-1]} | {total_dataset_tokens:,} Tokens ({total_dataset_tokens/1e9:.2f}B) | {train_cfg.get('max_steps', 100000):,} Max Steps"
+        except:
+            dataset_str = f"{args.train_data.split('/')[-1]} | {train_cfg.get('max_steps', 100000):,} Max Steps"
         logger.info("\n" + "="*50)
         if start_step == 0:
             logger.info(f"🚀 AXIOM V2 ENGINE IGNITION")
@@ -142,7 +148,7 @@ def main():
         logger.info(f"Math    : Batch {train_cfg.get('batch_size', 2)} x {config.get('training', {}).get('grad_accum_steps', 16)} Accum x {world_size} GPUs = {effective_batch} Effective Batch")
         logger.info(f"Tokens  : {tokens_per_step:,} tokens per step")
         logger.info(f"Optim   : AdamW (LR: {train_cfg.get('learning_rate', 3e-4):.2e} | Beta2: 0.95)")
-        logger.info(f"Data    : {args.train_data.split('/')[-1]} | {train_cfg.get('max_steps', 100000):,} Max Steps")
+        logger.info(f"Data    : {dataset_str}")
         logger.info(f"Compute : Float16 (Mixed Precision) | DDP no_sync")
         logger.info("="*50)
         if start_step == 0:
