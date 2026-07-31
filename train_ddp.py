@@ -120,6 +120,11 @@ def main():
     # 4. Resume Checkpoint
     start_epoch, start_step, best_val_loss = ckpt_mgr.load(model, optimizer, scheduler_mgr, trainer.scaler)
     
+    # If a checkpoint was loaded, the saved 'step' represents the last COMPLETED micro-batch.
+    # We must resume at the NEXT micro-batch to prevent re-processing and corrupting the gradient accumulation.
+    if os.path.exists(os.path.join(ckpt_mgr.save_dir, "latest.pt")):
+        start_step += 1
+    
     # 5. Train Loop
     if is_rank_zero:
         total_params = sum(p.numel() for p in model.parameters()) / 1e6
