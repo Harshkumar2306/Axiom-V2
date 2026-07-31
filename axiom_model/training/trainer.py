@@ -22,8 +22,6 @@ class Trainer:
         self.scaler = torch.amp.GradScaler('cuda' if torch.cuda.is_available() else 'cpu', enabled=torch.cuda.is_available())
         self.profiler = Profiler() if is_rank_zero else None
         
-        self._rolling_loss = None
-        
     def _get_torch_dtype(self):
         d = self.config.get('training', {}).get('dtype', 'float16') if 'training' in self.config else self.config.get('dtype', 'float16')
         if d == 'bfloat16': return torch.bfloat16

@@ -1,7 +1,6 @@
 import os
 import csv
 import logging
-import wandb
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,11 @@ class TrainingLogger:
                 writer.writerow(["step", "train_loss", "val_loss", "perplexity", "lr", "grad_norm", "tokens_per_sec", "gpu_allocated_gb"])
         
         if self.use_wandb:
+            import wandb
+            self._wandb = wandb
             wandb.init(project="axiom-v2", config=config)
+        else:
+            self._wandb = None
 
     def log_metrics(self, step, train_loss, val_loss=None, perplexity=None, lr=None, grad_norm=None, profiler_stats=None):
         # Format for terminal/log file
@@ -63,8 +66,8 @@ class TrainingLogger:
             if profiler_stats:
                 metrics["perf/tokens_per_sec"] = profiler_stats.get('tokens_per_sec', 0)
                 metrics["perf/gpu_allocated_gb"] = profiler_stats.get('allocated_gb', 0)
-            wandb.log(metrics, step=step)
+            self._wandb.log(metrics, step=step)
 
     def close(self):
         if self.use_wandb:
-            wandb.finish()
+            self._wandb.finish()

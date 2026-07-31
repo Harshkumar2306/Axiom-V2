@@ -219,14 +219,13 @@ def main():
             stats = trainer.profiler.end_step()
             stats.update(trainer.profiler.get_gpu_memory())
             
-            if optimizer_step % 1 == 0:
-                train_logger.log_metrics(
-                    step=optimizer_step, 
-                    train_loss=loss, 
-                    lr=scheduler_mgr.get_lr(), 
-                    grad_norm=grad_norm,
-                    profiler_stats=stats
-                )
+            train_logger.log_metrics(
+                step=optimizer_step, 
+                train_loss=loss, 
+                lr=scheduler_mgr.get_lr(), 
+                grad_norm=grad_norm,
+                profiler_stats=stats
+            )
                 
         if is_last_accum:
             eval_interval = train_cfg.get('eval_interval', 1000)
@@ -242,6 +241,10 @@ def main():
                 if is_rank_zero:
                     ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=is_best)
                 
+                # DDP Barrier: Rank 1 waits for Rank 0 to finish saving before both proceed
+                if is_distributed:
+                    dist.barrier()
+                
         # Graceful Pause Exit
         if pause_requested and is_last_accum:
             if is_rank_zero:
@@ -251,6 +254,9 @@ def main():
                 if os.path.exists("pause.flag"):
                     try: os.remove("pause.flag")
                     except: pass
+            # DDP Barrier: Both ranks must reach here before either exits
+            if is_distributed:
+                dist.barrier()
             cleanup()
             sys.exit(0)
                 
