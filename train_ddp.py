@@ -163,6 +163,8 @@ def main():
         logger.info(f"Optim   : AdamW (LR: {train_cfg.get('learning_rate', 3e-4):.2e} | Beta2: 0.95)")
         logger.info(f"Data    : {dataset_str}")
         logger.info(f"Compute : Float16 (Mixed Precision) | DDP no_sync")
+        logger.info(f"Speed   : TF32={'ON' if device.type == 'cuda' else 'OFF'} | Fused AdamW={'ON' if device.type == 'cuda' else 'OFF'}")
+        logger.info(f"Memory  : Grad Checkpointing={'ON' if train_cfg.get('gradient_checkpointing', True) else 'OFF'} | Native GQA={'ON' if getattr(model.module.layers[0].attention, '_use_native_gqa', False) else 'OFF'}")
         logger.info("="*50)
         if start_step == 0:
             logger.info(f"Starting Phase 3 Pretraining from scratch (Step 0)...")
