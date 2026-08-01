@@ -184,6 +184,9 @@ def main():
     # Fast-forward iterator if resuming
     if start_step > 0:
         if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {start_step} steps to resume...")
+        import tqdm
+        # Use tqdm only on rank 0 to prevent dual progress bars
+        pbar = tqdm.tqdm(total=start_step, desc="Fast-forwarding", disable=not is_rank_zero)
         for _ in range(start_step):
             try:
                 next(train_iter)
@@ -192,6 +195,8 @@ def main():
                 if train_sampler: train_sampler.set_epoch(start_epoch)
                 train_iter = iter(train_loader)
                 next(train_iter)
+            pbar.update(1)
+        pbar.close()
                 
     max_opt_steps = train_cfg.get('max_steps', 100000)
     max_micro_steps = max_opt_steps * config.get('training', {}).get('grad_accum_steps', 16)
