@@ -253,7 +253,7 @@ def main():
                 val_loss, val_ppl = evaluator.evaluate(num_batches=train_cfg.get('eval_iters', 100))
                 
                 if is_rank_zero:
-                    train_logger.log_metrics(step, loss, val_loss=val_loss, perplexity=val_ppl)
+                    train_logger.log_metrics(optimizer_step, loss, val_loss=val_loss, perplexity=val_ppl)
                 
                 is_best = val_loss < best_val_loss
                 if is_best: best_val_loss = val_loss
