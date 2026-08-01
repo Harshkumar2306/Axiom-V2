@@ -213,16 +213,7 @@ def main():
     max_micro_steps = max_opt_steps * config.get('training', {}).get('grad_accum_steps', 16)
     
     for step in range(start_step, max_micro_steps):
-        
-        # Check for pause file (Broadcast from Rank 0 to prevent DDP deadlocks)
-        pause_tensor = torch.tensor([1 if (is_rank_zero and os.path.exists("pause.flag")) else 0], device=device)
-        if is_distributed:
-            dist.broadcast(pause_tensor, src=0)
-        if pause_tensor.item() == 1:
-            if is_rank_zero and not pause_requested:
-                logger.info("\n[Graceful Exit] 'pause.flag' detected. Initiating pause sequence...")
-            pause_requested = True
-            
+
         try:
             x, y = next(train_iter)
         except StopIteration:
@@ -231,7 +222,7 @@ def main():
             train_iter = iter(train_loader)
             x, y = next(train_iter)
             
-        x, y = x.to(device), y.to(device)
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         
         if is_rank_zero and (step % trainer.grad_accum_steps == 0):
             # Only start timer on the first micro-batch of the accumulation cycle
@@ -278,6 +269,12 @@ def main():
                 # DDP Barrier: Rank 1 waits for Rank 0 to finish saving before both proceed
                 if is_distributed:
                     dist.barrier()
+
+            # Check for pause file once per optimizer step to save immense network/filesystem overhead
+            pause_tensor = torch.tensor([1 if (is_rank_zero and os.path.exists("pause.flag")) else 0], device=device)
+            if is_distributed:
+                dist.broadcast(pause_tensor, src=0)
+            pause_requested = (pause_tensor.item() == 1)
                 
         # Graceful Pause Exit
         if pause_requested and is_last_accum:
