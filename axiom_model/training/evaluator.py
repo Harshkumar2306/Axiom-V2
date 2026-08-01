@@ -9,6 +9,7 @@ class Evaluator:
         self.device = device
         self.is_distributed = is_distributed
         self.config = config or {}
+        self.val_iter = iter(self.val_loader)
         
     @torch.no_grad()
     def evaluate(self, num_batches=100):
@@ -17,12 +18,13 @@ class Evaluator:
         batches_run = 0
         
         # Using an explicit iterator avoids fully traversing the validation set every eval phase
-        val_iter = iter(self.val_loader)
         for _ in range(num_batches):
             try:
-                x, y = next(val_iter)
+                x, y = next(self.val_iter)
             except StopIteration:
-                break
+                # Refresh iterator when epoch ends
+                self.val_iter = iter(self.val_loader)
+                x, y = next(self.val_iter)
                 
             x = x.to(self.device, non_blocking=True)
             y = y.to(self.device, non_blocking=True)

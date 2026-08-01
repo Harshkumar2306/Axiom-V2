@@ -179,33 +179,47 @@ def main():
     if train_sampler:
         train_sampler.set_epoch(start_epoch)
         
-    train_iter = iter(train_loader)
-    
-    # Fast-forward iterator if resuming
+    # Fast-forward iterator instantly if resuming
     if start_step > 0:
-        if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {start_step} steps to resume...")
-        import tqdm
-        # Use tqdm only on rank 0 to prevent dual progress bars
-        pbar = tqdm.tqdm(total=start_step, desc="Fast-forwarding", disable=not is_rank_zero)
-        for _ in range(start_step):
-            try:
-                next(train_iter)
-            except StopIteration:
-                start_epoch += 1
-                if train_sampler: train_sampler.set_epoch(start_epoch)
-                train_iter = iter(train_loader)
-                next(train_iter)
-            pbar.update(1)
-        pbar.close()
+        if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {start_step} steps instantly via Sampler slicing...")
+        class FastForwardSampler:
+            def __init__(self, base_sampler, skip_batches, batch_size):
+                self.base_sampler = base_sampler
+                self.skip_items = skip_batches * batch_size
+            def __iter__(self):
+                it = iter(self.base_sampler)
+                import itertools
+                list(itertools.islice(it, self.skip_items))
+                return it
+            def __len__(self):
+                return len(self.base_sampler) - self.skip_items
+            def set_epoch(self, epoch):
+                if hasattr(self.base_sampler, 'set_epoch'):
+                    self.base_sampler.set_epoch(epoch)
+                    
+        train_sampler = FastForwardSampler(train_loader.sampler, start_step, train_loader.batch_size)
+        train_loader = torch.utils.data.DataLoader(
+            train_loader.dataset,
+            batch_size=train_loader.batch_size,
+            sampler=train_sampler,
+            num_workers=train_loader.num_workers,
+            pin_memory=train_loader.pin_memory,
+            drop_last=train_loader.drop_last
+        )
+        
+    train_iter = iter(train_loader)
                 
     max_opt_steps = train_cfg.get('max_steps', 100000)
     max_micro_steps = max_opt_steps * config.get('training', {}).get('grad_accum_steps', 16)
     
     for step in range(start_step, max_micro_steps):
         
-        # Check for pause file
-        if os.path.exists("pause.flag"):
-            if is_rank_zero and not pause_requested: 
+        # Check for pause file (Broadcast from Rank 0 to prevent DDP deadlocks)
+        pause_tensor = torch.tensor([1 if (is_rank_zero and os.path.exists("pause.flag")) else 0], device=device)
+        if is_distributed:
+            dist.broadcast(pause_tensor, src=0)
+        if pause_tensor.item() == 1:
+            if is_rank_zero and not pause_requested:
                 logger.info("\n[Graceful Exit] 'pause.flag' detected. Initiating pause sequence...")
             pause_requested = True
             

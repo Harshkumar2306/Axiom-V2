@@ -114,6 +114,7 @@ def stream_and_pack(output_dir: str):
             # so we re-tokenize from the start and simply don't write until our
             # token counter catches up with what is already on disk.
             current_dataset_tokens_processed = 0
+            resume_target = dataset_tokens  # Freeze target to prevent oscillating drops
 
             for row in dataset:
                 text = row.get('text', row.get('content', ''))
@@ -125,7 +126,7 @@ def stream_and_pack(output_dir: str):
                 tokens.append(enc.eot_token)
 
                 # If we are catching up, just advance the counter and don't write.
-                if current_dataset_tokens_processed < dataset_tokens:
+                if current_dataset_tokens_processed < resume_target:
                     current_dataset_tokens_processed += len(tokens)
                     continue
 

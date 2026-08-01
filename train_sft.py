@@ -169,26 +169,45 @@ def main():
     if train_sampler:
         train_sampler.set_epoch(start_epoch)
 
-    train_iter = iter(train_loader)
-
     # Fast-forward iterator if resuming (start_step is in optimizer steps,
     # each of which consumed `grad_accum` micro-batches).
     if start_step > 0:
+        if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {start_step} steps instantly via Sampler slicing...")
         batches_to_skip = start_step * grad_accum
-        if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {batches_to_skip} micro-batches to resume SFT...")
-        for _ in range(batches_to_skip):
-            try:
-                next(train_iter)
-            except StopIteration:
-                start_epoch += 1
-                if train_sampler: train_sampler.set_epoch(start_epoch)
-                train_iter = iter(train_loader)
-                next(train_iter)
+        class FastForwardSampler:
+            def __init__(self, base_sampler, skip_batches, batch_size):
+                self.base_sampler = base_sampler
+                self.skip_items = skip_batches * batch_size
+            def __iter__(self):
+                it = iter(self.base_sampler)
+                import itertools
+                list(itertools.islice(it, self.skip_items))
+                return it
+            def __len__(self):
+                return len(self.base_sampler) - self.skip_items
+            def set_epoch(self, epoch):
+                if hasattr(self.base_sampler, 'set_epoch'):
+                    self.base_sampler.set_epoch(epoch)
+                    
+        train_sampler = FastForwardSampler(train_loader.sampler, batches_to_skip, train_loader.batch_size)
+        train_loader = torch.utils.data.DataLoader(
+            train_loader.dataset,
+            batch_size=train_loader.batch_size,
+            sampler=train_sampler,
+            num_workers=train_loader.num_workers,
+            pin_memory=train_loader.pin_memory,
+            drop_last=train_loader.drop_last
+        )
+        
+    train_iter = iter(train_loader)
 
     for opt_step in range(start_step, max_opt_steps):
 
-        # Check for pause file (detection only — removal happens once, on rank 0, at exit)
-        if os.path.exists("pause.flag"):
+        # Check for pause file (Broadcast from Rank 0 to prevent DDP deadlocks)
+        pause_tensor = torch.tensor([1 if (is_rank_zero and os.path.exists("pause.flag")) else 0], device=device)
+        if is_distributed:
+            dist.broadcast(pause_tensor, src=0)
+        if pause_tensor.item() == 1:
             if is_rank_zero and not pause_requested:
                 logger.info("\n[Graceful Exit] 'pause.flag' detected...")
             pause_requested = True
@@ -196,6 +215,7 @@ def main():
         accum_loss = 0.0
         grad_norm = None
 
+        oom_flag = torch.tensor([0], device=device)
         for micro in range(grad_accum):
             try:
                 x, y = next(train_iter)
@@ -222,13 +242,18 @@ def main():
                 accum_loss += loss
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
-                    logger.error(f"[OOM Safety] OOM caught. Clearing cache.")
+                    logger.error(f"[OOM Safety] OOM caught on Rank {dist.get_rank() if is_distributed else 0}. Clearing cache.")
                     if torch.cuda.is_available(): torch.cuda.empty_cache()
                     elif hasattr(torch.mps, 'empty_cache'): torch.mps.empty_cache()
-                    if is_last_micro: optimizer.zero_grad(set_to_none=True)
-                    break
+                    oom_flag[0] = 1
                 else:
                     raise e
+
+            if is_distributed:
+                dist.all_reduce(oom_flag, op=dist.ReduceOp.MAX)
+            if oom_flag.item() > 0:
+                optimizer.zero_grad(set_to_none=True)
+                break
 
         scheduler_mgr.step()
         current_step = opt_step + 1  # 1-based count of completed optimizer steps
