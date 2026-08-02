@@ -2,7 +2,7 @@
 
 # 🚀 Axiom V2: Custom 476M Foundation Model
 
-**A hyper-optimized 476M Parameter Language Model and Distributed Pretraining Engine built from scratch for Kaggle 2x T4 GPUs.**
+**A hyper-optimized 476M Parameter Language Model and Distributed Pretraining Engine built from scratch.**
 
 </div>
 
