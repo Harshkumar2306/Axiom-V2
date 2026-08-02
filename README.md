@@ -7,7 +7,7 @@
 </div>
 
 ## 📖 Overview
-Axiom V2 is a from-scratch, pre-trained language model project designed to prove that world-class AI engineering can be executed in resource-constrained environments. By combining a proprietary custom neural network architecture with a highly aggressive PyTorch `DistributedDataParallel` engine, this project successfully trains a 476M parameter model on free Kaggle T4 GPUs, achieving physical hardware limits of ~17.5% Model FLOPs Utilization (MFU).
+Axiom V2 is a from-scratch, pre-trained language model project designed to prove that world-class AI engineering can be executed in resource-constrained environments. By combining a proprietary custom neural network architecture with a highly aggressive PyTorch `DistributedDataParallel` engine, this project successfully trains a 476M parameter model on consumer-grade NVIDIA T4 GPUs, achieving physical hardware limits of ~17.5% Model FLOPs Utilization (MFU).
 
 ---
 
@@ -48,10 +48,10 @@ To ensure a balanced ratio of reasoning, facts, and grammar, the dataset uses a 
 ---
 
 ## ⚡ The Custom DDP Engine (`train_ddp.py`)
-The Pretraining Engine is a custom PyTorch loop engineered to extract the absolute physical speed limit out of free Kaggle hardware. 
+The Pretraining Engine is a custom PyTorch loop engineered to extract the absolute physical speed limit out of constrained hardware environments. 
 
 ### Hyper-Optimizations
-* **Memory-Mapped Data Loader:** The dataset is read directly from disk via `numpy.memmap`, bypassing Kaggle's strict `/dev/shm` RAM limits.
+* **Memory-Mapped Data Loader:** The dataset is read directly from disk via `numpy.memmap`, bypassing strict `/dev/shm` RAM limits found in cloud environments.
 * **Asynchronous CPU Streaming:** Uses `non_blocking=True` and `pin_memory=True` to stream massive tensors across the PCIe bus without stalling the Tensor Cores.
 * **No-Sync Gradient Accumulation:** The PyTorch `model.no_sync()` context is used to accumulate 32 micro-batches (effective batch size 64) before allowing DDP to talk across the network, slashing NCCL communication overhead by 96%.
 * **Memory-Efficient Attention:** Automatically uses `torch.nn.functional.scaled_dot_product_attention` to bypass VRAM bottlenecks.
@@ -60,8 +60,8 @@ The Pretraining Engine is a custom PyTorch loop engineered to extract the absolu
 * **CuDNN Auto-Tuning:** Uses `torch.backends.cudnn.benchmark = True` to dynamically profile and select the fastest matrix multiplication algorithms on the fly.
 * **Fused AdamW:** Offloads the entire optimizer step into a single fused CUDA kernel (`fused=True`).
 
-### 🛡️ Kaggle Survival Features
-Training on Kaggle means dealing with strict 12-hour session limits. This engine is built to survive continuous interrupt-and-resume cycles:
+### 🛡️ Fault-Tolerant Session Management
+Training in preemptible cloud instances (like Kaggle or Colab) requires resilience to strict session timeouts. This engine is built to survive continuous interrupt-and-resume cycles:
 * **Graceful Interruptions:** Running `touch pause.flag` triggers a barrier-synchronized DDP exit. Rank 0 detects the file, uses `dist.broadcast` to alert Rank 1, and both GPUs finish their current micro-batch, save an atomic checkpoint, and exit safely without corrupting the gradient tracker.
 * **Instant Fast-Forwarding:** Resuming a session doesn't mean re-reading 4 billion tokens. The engine uses a custom `FastForwardSampler` built on `itertools.islice` to instantly slice the dataset and resume on the exact micro-batch you left off on.
 * **Deadlock Prevention:** `NCCL_P2P_DISABLE=1` and `NCCL_IB_DISABLE=1` are natively supported, with DDP `dist.barrier()` wrappers utilizing a strict 30-minute NCCL timeout to prevent silent ring-fracturing.
@@ -84,37 +84,36 @@ Axiom-V2/
 
 ---
 
-## 🚀 Quick Start (Kaggle)
+## 🚀 Quick Start (Cloud / Kaggle)
 
 1. **Clone & Update**
 ```bash
-%cd /kaggle/working
 git clone https://github.com/Harshkumar2306/Axiom-V2.git
-%cd Axiom-V2
+cd Axiom-V2
 ```
 
 2. **Ignite the Engine**
 ```bash
 !PYTHONUNBUFFERED=1 NCCL_P2P_DISABLE=1 NCCL_IB_DISABLE=1 torchrun --nproc_per_node=2 train_ddp.py \
     --config axiom_model/configs/500M.yaml \
-    --train_data /kaggle/input/datasets/hrsh0o23/axiom-v2-4-5b-dataset/train.bin \
-    --val_data /kaggle/input/datasets/hrsh0o23/axiom-v2-4-5b-dataset/val.bin
+    --train_data /path/to/train.bin \
+    --val_data /path/to/val.bin
 ```
 
-3. **Graceful Pause (Before your 12-hour limit hits)**
-Open a new Kaggle terminal and run:
+3. **Graceful Pause (Before session limits hit)**
+Open a terminal in the root directory and run:
 ```bash
-touch /kaggle/working/Axiom-V2/pause.flag
+touch pause.flag
 ```
 The engine will safely save `./checkpoints/latest.pt` and shut down.
 
 4. **Resume**
-Restart your Kaggle kernel and just run the ignition command again. The engine will auto-detect `latest.pt` and fast-forward instantly.
+Restart your environment and just run the ignition command again. The engine will auto-detect `latest.pt` and fast-forward instantly.
 
 ---
 
 ## 🗺️ The Roadmap
-- [x] **Phase 1: Build Custom DDP Engine** — Engineered a fully custom PyTorch DistributedDataParallel loop optimized specifically to bypass Kaggle's `/dev/shm` RAM limits and maximize T4 GPU compute.
+- [x] **Phase 1: Build Custom DDP Engine** — Engineered a fully custom PyTorch DistributedDataParallel loop optimized specifically to bypass strict `/dev/shm` RAM limits and maximize T4 GPU compute.
 - [x] **Phase 2: Build Dataset (4.5B Tokens)** — Curated, filtered, and tokenized a 4.5 Billion token mix (Web, Code, Science) using `cl100k_base` and packed into binary format for instant Memmap streaming.
 - [x] **Phase 3: Pretrain Foundation Model** — (In Progress) Currently executing the 35,000-step pretraining run using asynchronous dataloaders and graceful `pause.flag` resumption logic.
 - [ ] **Phase 4: Supervised Fine-Tuning (SFT)** — Transitioning the base model into an instruction-following assistant using high-quality ChatML formatted conversational datasets.
