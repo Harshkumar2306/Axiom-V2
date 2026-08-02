@@ -20,10 +20,17 @@ Axiom V2 is built on the absolute cutting-edge of modern transformer design, mir
 
 ## 🗄️ Dataset (4.5 Billion Tokens)
 Axiom V2 is currently being pretrained on a custom-curated 4.5 Billion token dataset designed for maximum knowledge density.
-* **Token Size:** 4,431,247,349 tokens
-* **Format:** Raw `uint32` binary memmap for instantaneous disk-streaming without RAM overhead.
-* **Tokenizer:** OpenAI `cl100k_base` (tiktoken) - significantly denser and more information-rich than standard sentencepiece tokenizers.
-* **Composition:** A high-quality blend of FineWeb-Edu, StarCoder (Python/C++), Wikipedia, and MiniPile to ensure strong reasoning, coding, and general knowledge capabilities.
+* **Total Tokens:** 4,500,000,030 (4.43B Train | 68M Val)
+* **Format:** Raw `uint32` binary memmap (18.00 GB total physical disk size)
+* **Tokenizer:** OpenAI `cl100k_base` (100,277 vocab)
+
+### 🧬 Corpus Distribution
+To ensure a balanced ratio of reasoning, facts, and grammar, the dataset uses a strict 5-part recipe:
+1. **Educational Web (55% | 2.47B Tokens):** Derived from FineWeb-Edu. Heavily filtered for textbooks, tutorials, and deep explainers to build general knowledge.
+2. **Code & Technical Logic (27% | 1.21B Tokens):** High-quality Python and C++ repositories. Crucial for procedural reasoning and structured generation.
+3. **Factual Foundations (10% | 450M Tokens):** Cleaned, plain-text encyclopedic articles selected for high linguistic consistency.
+4. **Advanced Scientific Reasoning (5% | 225M Tokens):** Scientific preprints (arXiv) covering mathematics, physics, and machine learning.
+5. **Narratives & Grammar (3% | 135M Tokens):** Short, coherent stories and dialogue to teach fundamental grammar and narrative coherence.
 
 ## ⚡ The Engine
 The Axiom V2 Pretraining Engine is a custom `DistributedDataParallel` (DDP) PyTorch loop engineered to extract the physical speed limit out of free Kaggle hardware. It operates at ~11.3 TFLOPs effective throughput (17.5% MFU) on 2x NVIDIA T4s.
