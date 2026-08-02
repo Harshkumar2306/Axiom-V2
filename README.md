@@ -113,9 +113,9 @@ Restart your environment and just run the ignition command again. The engine wil
 ---
 
 ## 🗺️ The Roadmap
-- [x] **Phase 1: Build Custom DDP Engine** — Engineered a fully custom PyTorch DistributedDataParallel loop optimized specifically to bypass strict `/dev/shm` RAM limits and maximize T4 GPU compute.
-- [x] **Phase 2: Build Dataset (4.5B Tokens)** — Curated, filtered, and tokenized a 4.5 Billion token mix (Web, Code, Science) using `cl100k_base` and packed into binary format for instant Memmap streaming.
-- [x] **Phase 3: Pretrain Foundation Model** — (In Progress) Currently executing the 35,000-step pretraining run using asynchronous dataloaders and graceful `pause.flag` resumption logic.
-- [ ] **Phase 4: Supervised Fine-Tuning (SFT)** — Transitioning the base model into an instruction-following assistant using high-quality ChatML formatted conversational datasets.
-- [ ] **Phase 5: Direct Preference Optimization (DPO)** — Aligning model outputs with human preferences to reduce hallucinations and enforce logical, helpful responses.
-- [ ] **Phase 6: Deployment & Ecosystem** — Hooking the trained network up to a localized backend server with Retrieval-Augmented Generation (RAG) capabilities.
+- **Phase 1: Build Custom DDP Engine** — Engineered a fully custom PyTorch DistributedDataParallel loop optimized specifically to bypass strict `/dev/shm` RAM limits and maximize T4 GPU compute.
+- **Phase 2: Build Dataset (4.5B Tokens)** — Curated, filtered, and tokenized a 4.5 Billion token mix (Web, Code, Science) using `cl100k_base` and packed into binary format for instant Memmap streaming.
+- **Phase 3: Pretrain Foundation Model** — (In Progress) Currently executing the 35,000-step pretraining run using asynchronous dataloaders and graceful `pause.flag` resumption logic.
+- **Phase 4: Supervised Fine-Tuning (SFT)** — Transitioning the base model into an instruction-following assistant using high-quality ChatML formatted conversational datasets.
+- **Phase 5: Direct Preference Optimization (DPO)** — Aligning model outputs with human preferences to reduce hallucinations and enforce logical, helpful responses.
+- **Phase 6: Deployment & Ecosystem** — Hooking the trained network up to a localized backend server with Retrieval-Augmented Generation (RAG) capabilities.
