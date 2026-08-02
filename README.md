@@ -2,7 +2,7 @@
 
 # 🚀 Axiom V2: Custom 476M Foundation Model
 
-**A hyper-optimized 476M Parameter Language Model and Distributed Pretraining Engine built from scratch.**
+**A fully proprietary 476M Parameter Language Model and Distributed Pretraining Engine built from scratch for Kaggle 2x T4 GPUs.**
 
 </div>
 
@@ -14,14 +14,19 @@ Axiom V2 is a from-scratch, pre-trained language model project designed to prove
 ## 🧠 Axiom Proprietary Architecture
 Axiom V2 is a fully custom-built neural network designed from the ground up to achieve maximum intelligence density within a 500M parameter footprint. It leverages the most advanced mathematical paradigms in modern AI research:
 
+### Core Hyperparameters
 * **Parameters:** 476,000,000
 * **Vocabulary:** 100,277 (OpenAI `cl100k_base` / tiktoken)
 * **Context Window:** 2048 Tokens
 * **Layers:** 24
-* **Attention:** Grouped-Query Attention (GQA) with 16 Q-heads and 4 KV-heads (4:1 compression ratio)
-* **Activations:** SwiGLU (Swish-Gated Linear Unit)
-* **Normalization:** RMSNorm (with explicit FP32 upcasting to prevent NaN explosions)
-* **Embeddings:** Rotary Positional Embeddings (RoPE)
+* **Dimension (`d_model`):** 1024
+
+### Deep Architectural Nuances
+* **Grouped-Query Attention (GQA):** Uses 16 Query heads and 4 KV heads, achieving a 4:1 memory compression ratio during generation while retaining near Multi-Head Attention (MHA) performance.
+* **SwiGLU Activations:** Implements the Swish-Gated Linear Unit with a custom `multiple_of=256` hidden dimension rounding to optimize GPU tile sizes.
+* **Rotary Positional Embeddings (RoPE):** Operates with a long-context `rope_theta=500000.0`. The `freqs_cis` matrix is strictly registered as a non-persistent buffer (`persistent=False`), ensuring it safely travels between CPU and GPU without bloating the `state_dict` sizes.
+* **RMSNorm:** Replaces standard LayerNorm for speed, utilizing a strict `norm_eps=1.0e-5` with explicit FP32 upcasting to prevent half-precision NaN explosions during deep backpropagation.
+* **GPT-Style Scaled Initialization:** Implements a custom residual-branch projection scaling (`0.02 / math.sqrt(2 * n_layers)`) to stabilize the variance of the residual stream as network depth grows.
 
 ---
 
@@ -42,23 +47,24 @@ To ensure a balanced ratio of reasoning, facts, and grammar, the dataset uses a 
 
 ---
 
-## ⚡ The Custom DDP Engine
-The Axiom V2 Pretraining Engine (`train_ddp.py`) is a custom PyTorch loop engineered to extract the absolute physical speed limit out of free Kaggle hardware. 
+## ⚡ The Custom DDP Engine (`train_ddp.py`)
+The Pretraining Engine is a custom PyTorch loop engineered to extract the absolute physical speed limit out of free Kaggle hardware. 
 
 ### Hyper-Optimizations
 * **Memory-Mapped Data Loader:** The dataset is read directly from disk via `numpy.memmap`, bypassing Kaggle's strict `/dev/shm` RAM limits.
 * **Asynchronous CPU Streaming:** Uses `non_blocking=True` and `pin_memory=True` to stream massive tensors across the PCIe bus without stalling the Tensor Cores.
-* **No-Sync Gradient Accumulation:** The PyTorch `no_sync()` context is used to accumulate 32 micro-batches before allowing DDP to talk across the network, slashing NCCL communication overhead by 96%.
-* **Memory-Efficient Attention:** Automatically uses xFormers / PyTorch `scaled_dot_product_attention` to bypass VRAM bottlenecks.
-* **Mixed Precision:** Native `torch.autocast` (FP16) combined with `torch.amp.GradScaler` safely navigates 16-bit math.
+* **No-Sync Gradient Accumulation:** The PyTorch `model.no_sync()` context is used to accumulate 32 micro-batches (effective batch size 64) before allowing DDP to talk across the network, slashing NCCL communication overhead by 96%.
+* **Memory-Efficient Attention:** Automatically uses `torch.nn.functional.scaled_dot_product_attention` to bypass VRAM bottlenecks.
+* **Gradient Checkpointing:** Re-computes forward passes to save ~50% activation VRAM. Implemented securely using `use_reentrant=False` for maximum PyTorch >= 2.0 stability.
+* **Mixed Precision & TF32:** Native `torch.autocast` (FP16) combined with `torch.amp.GradScaler` safely navigates 16-bit math. TF32 is explicitly enabled (`allow_tf32=True`) for free hardware speedups on supported devices.
 * **CuDNN Auto-Tuning:** Uses `torch.backends.cudnn.benchmark = True` to dynamically profile and select the fastest matrix multiplication algorithms on the fly.
-* **Fused AdamW:** Offloads the optimizer step into a single fused CUDA kernel.
+* **Fused AdamW:** Offloads the entire optimizer step into a single fused CUDA kernel (`fused=True`).
 
 ### 🛡️ Kaggle Survival Features
 Training on Kaggle means dealing with strict 12-hour session limits. This engine is built to survive continuous interrupt-and-resume cycles:
-* **Graceful Interruptions:** Running `!touch pause.flag` triggers a barrier-synchronized DDP exit. Both GPUs finish their current micro-batch, save an atomic checkpoint, and exit safely without corrupting the gradient tracker.
-* **Instant Fast-Forwarding:** Resuming a session doesn't mean re-reading 4 billion tokens. The engine uses a custom `FastForwardSampler` to instantly slice the dataset and resume on the exact micro-batch you left off on.
-* **Deadlock Prevention:** `NCCL_P2P_DISABLE=1` and `NCCL_IB_DISABLE=1` are natively supported, with DDP barriers wrapped in local GPU ranks to prevent silent ring-fracturing.
+* **Graceful Interruptions:** Running `touch pause.flag` triggers a barrier-synchronized DDP exit. Rank 0 detects the file, uses `dist.broadcast` to alert Rank 1, and both GPUs finish their current micro-batch, save an atomic checkpoint, and exit safely without corrupting the gradient tracker.
+* **Instant Fast-Forwarding:** Resuming a session doesn't mean re-reading 4 billion tokens. The engine uses a custom `FastForwardSampler` built on `itertools.islice` to instantly slice the dataset and resume on the exact micro-batch you left off on.
+* **Deadlock Prevention:** `NCCL_P2P_DISABLE=1` and `NCCL_IB_DISABLE=1` are natively supported, with DDP `dist.barrier()` wrappers utilizing a strict 30-minute NCCL timeout to prevent silent ring-fracturing.
 
 ---
 
