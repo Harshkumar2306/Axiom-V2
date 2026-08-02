@@ -13,13 +13,13 @@ def set_seed(seed: int = 42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     
-    # CuDNN determinism
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    # CuDNN determinism (can impact performance slightly)
+    torch.backends.cudnn.deterministic = False  # Relax for speed
+    torch.backends.cudnn.benchmark = True       # Auto-tunes matrix multiplications for max speed
     
     # Ensure DataLoader workers are deterministic
     os.environ["PYTHONHASHSEED"] = str(seed)
-    print(f"[Axiom-v2] Strict deterministic seed set to {seed}.")
+    print(f"[Axiom-v2] Seed set to {seed}. (CuDNN auto-tuning enabled for speed)")
 
 def capture_environment_snapshot(config_path: str, save_dir: str):
     """Automatically save Git hash, CUDA versions, and configs to make experiments reproducible."""
