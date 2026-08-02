@@ -7,12 +7,12 @@
 </div>
 
 ## 📖 Overview
-Axiom V2 is a from-scratch, pre-trained language model project designed to prove that world-class AI engineering can be executed in resource-constrained environments. By combining the architectural blueprint of Meta's Llama-3 with a custom, highly aggressive PyTorch `DistributedDataParallel` engine, this project successfully trains a 476M parameter model on free Kaggle T4 GPUs, achieving physical hardware limits of ~17.5% Model FLOPs Utilization (MFU).
+Axiom V2 is a from-scratch, pre-trained language model project designed to prove that world-class AI engineering can be executed in resource-constrained environments. By combining a proprietary custom neural network architecture with a highly aggressive PyTorch `DistributedDataParallel` engine, this project successfully trains a 476M parameter model on free Kaggle T4 GPUs, achieving physical hardware limits of ~17.5% Model FLOPs Utilization (MFU).
 
 ---
 
-## 🧠 Architecture (Llama-3 Blueprint)
-Axiom V2 mirrors the exact architectural choices of Llama-3 to achieve maximum intelligence density in a 500M parameter footprint.
+## 🧠 Axiom Proprietary Architecture
+Axiom V2 is a fully custom-built neural network designed from the ground up to achieve maximum intelligence density within a 500M parameter footprint. It leverages the most advanced mathematical paradigms in modern AI research:
 
 * **Parameters:** 476,000,000
 * **Vocabulary:** 100,277 (OpenAI `cl100k_base` / tiktoken)
