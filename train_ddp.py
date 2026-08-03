@@ -131,7 +131,7 @@ def main():
     train_logger = TrainingLogger(use_wandb=False, max_steps=train_cfg.get('max_steps', 100000)) if is_rank_zero else None
     
     # 4. Resume Checkpoint
-    start_epoch, start_step, best_val_loss, best_val_step = ckpt_mgr.load(model, optimizer, scheduler_mgr, trainer.scaler)
+    start_epoch, start_step, best_val_loss = ckpt_mgr.load(model, optimizer, scheduler_mgr, trainer.scaler)
     
     # If a checkpoint was loaded, the saved 'step' represents the last COMPLETED micro-batch.
     # We must resume at the NEXT micro-batch to prevent re-processing and corrupting the gradient accumulation.
@@ -172,10 +172,7 @@ def main():
             logger.info(f"Resuming from Checkpoint:")
             logger.info(f" -> Epoch        : {start_epoch}")
             logger.info(f" -> Global Step  : {start_step:,}")
-            if best_val_step > 0:
-                logger.info(f" -> Best Val Loss: {best_val_loss:.4f} (achieved at step {best_val_step:,})")
-            else:
-                logger.info(f" -> Best Val Loss: {best_val_loss:.4f}")
+            logger.info(f" -> Best Val Loss: {best_val_loss:.4f}")
             logger.info(f" -> Datastream   : Fast-forwarding {start_step:,} batches...")
         logger.info("="*50 + "\n")
         
@@ -264,12 +261,10 @@ def main():
                     train_logger.log_metrics(optimizer_step, loss, val_loss=val_loss, perplexity=val_ppl)
                 
                 is_best = val_loss < best_val_loss
-                if is_best: 
-                    best_val_loss = val_loss
-                    best_val_step = step
+                if is_best: best_val_loss = val_loss
                 
                 if is_rank_zero:
-                    ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, best_val_step, config, is_best=is_best)
+                    ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=is_best)
                 
                 # DDP Barrier: Rank 1 waits for Rank 0 to finish saving before both proceed
                 if is_distributed:
@@ -285,7 +280,7 @@ def main():
         if pause_requested and is_last_accum:
             if is_rank_zero:
                 logger.info(f"Saving paused checkpoint at step {step}...")
-                ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, best_val_step, config, is_best=False)
+                ckpt_mgr.save(model, optimizer, scheduler_mgr, trainer.scaler, start_epoch, step, best_val_loss, config, is_best=False)
                 train_logger.close()
                 if os.path.exists("pause.flag"):
                     try: os.remove("pause.flag")
