@@ -13,7 +13,7 @@ class CheckpointManager:
         self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
 
-    def save(self, model, optimizer, scheduler, scaler, epoch, step, best_val_loss, config, is_best=False):
+    def save(self, model, optimizer, scheduler, scaler, epoch, step, best_val_loss, best_val_step, config, is_best=False):
         # 1. Safety Check: Verify free disk space before saving to prevent
         # corruption. A full 500M checkpoint (fp32 weights + AdamW m/v) is ~6 GB.
         try:
@@ -33,6 +33,7 @@ class CheckpointManager:
             'epoch': epoch,
             'step': step,
             'best_val_loss': best_val_loss,
+            'best_val_step': best_val_step,
             'config': config,
             'py_rng_state': random.getstate(),
             'np_rng_state': np.random.get_state(),
@@ -101,4 +102,4 @@ class CheckpointManager:
         if state['cuda_rng_state'] is not None and torch.cuda.is_available():
             torch.cuda.set_rng_state(state['cuda_rng_state'])
             
-        return state.get('epoch', 0), state.get('step', 0), state.get('best_val_loss', float('inf'))
+        return state.get('epoch', 0), state.get('step', 0), state.get('best_val_loss', float('inf')), state.get('best_val_step', 0)
