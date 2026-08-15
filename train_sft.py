@@ -50,6 +50,7 @@ def parse_args():
     parser.add_argument('--pretrained', type=str, default='./checkpoints/best.pt', help='Path to pretrained base checkpoint')
     parser.add_argument('--save_dir', type=str, default='./checkpoints_sft', help='Checkpoint output directory')
     parser.add_argument('--replay_data', type=str, default=None, help='Path to train.bin for 10% Mixed Replay SFT')
+    parser.add_argument('--max_steps', type=int, default=None, help='Override max optimization steps')
     return parser.parse_args()
 
 def main():
@@ -104,7 +105,7 @@ def main():
     )
 
     # Plain cosine decay (no warm restarts) for SFT.
-    max_opt_steps = int(sft_cfg.get('max_steps', 500))
+    max_opt_steps = args.max_steps if args.max_steps is not None else int(sft_cfg.get('max_steps', 500))
     scheduler_mgr = SchedulerManager(optimizer, {
         "type": "cosine",
         "T_max": max_opt_steps,
