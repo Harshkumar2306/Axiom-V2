@@ -50,8 +50,14 @@ class CheckpointManager:
         
         if is_best:
             best_path = os.path.join(self.save_dir, "best.pt")
-            shutil.copyfile(latest_path, best_path)
-            
+            # Save a stripped-down version (only model weights & config) to save disk space on Kaggle!
+            best_state = {
+                'model': state['model'],
+                'config': config,
+            }
+            tmp_best_path = best_path + ".tmp"
+            torch.save(best_state, tmp_best_path)
+            os.replace(tmp_best_path, best_path)
             # Save metadata
             metadata = {
                 "best_step": step,
