@@ -15,10 +15,11 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(dim, eps=norm_eps)
         self.ffn_norm = RMSNorm(dim, eps=norm_eps)
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor):
-        h = x + self.attention(self.attention_norm(x), freqs_cis)
+    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, kv_cache=None):
+        attn_out, new_kv_cache = self.attention(self.attention_norm(x), freqs_cis, kv_cache)
+        h = x + attn_out
         out = h + self.feed_forward(self.ffn_norm(h))
-        return out
+        return out, new_kv_cache
 
 class AxiomV2(nn.Module):
     """The Axiom v2 500M Core Engine Architecture"""
@@ -68,19 +69,32 @@ class AxiomV2(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, tokens: torch.Tensor):
+    def forward(self, tokens: torch.Tensor, start_pos: int = 0, kv_cache=None, return_cache: bool = False):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
+        
+        # Explicit 4096-token boundary handling (Test 3)
+        if start_pos + seqlen > self.max_seq_len:
+            raise ValueError(f"Context window overflow: {start_pos + seqlen} > {self.max_seq_len}")
+            
         # Buffer already lives on the model's device; slicing is a view (no copy).
-        freqs_cis = self.freqs_cis[:seqlen]
+        freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
 
-        for layer in self.layers:
+        new_kv_caches = []
+        for i, layer in enumerate(self.layers):
+            layer_cache = kv_cache[i] if kv_cache is not None else None
+            
             if self.gradient_checkpointing and self.training:
                 # use_reentrant=False is the recommended way for PyTorch >= 1.11
-                h = torch.utils.checkpoint.checkpoint(layer, h, freqs_cis, use_reentrant=False)
+                # Checkpoint doesn't easily support multiple return values, but during training kv_cache is always None
+                h, _ = torch.utils.checkpoint.checkpoint(layer, h, freqs_cis, None, use_reentrant=False)
             else:
-                h = layer(h, freqs_cis)
+                h, cache = layer(h, freqs_cis, layer_cache)
+                new_kv_caches.append(cache)
             
         h = self.norm(h)
         output = self.output(h)
+        
+        if return_cache:
+            return output, new_kv_caches
         return output
