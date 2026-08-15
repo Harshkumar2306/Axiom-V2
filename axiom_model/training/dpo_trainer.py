@@ -50,19 +50,27 @@ class DPOTrainer:
     def train_step(self, chosen_ids, chosen_labels, rejected_ids, rejected_labels, is_last_accum_step=True):
         self.policy_model.train()
         
+        # Concatenate chosen and rejected to do a single forward pass
+        # This completely avoids PyTorch's checkpointing inplace modification error with RoPE buffers
+        combined_ids = torch.cat([chosen_ids, rejected_ids], dim=0)
+        
         # Forward Reference Model (No gradients, saving VRAM)
         with torch.no_grad():
-            with autocast():
-                ref_chosen_logits = self.ref_model(chosen_ids)
-                ref_rejected_logits = self.ref_model(rejected_ids)
+            with torch.amp.autocast('cuda'):
+                ref_combined_logits = self.ref_model(combined_ids)
+                
+                ref_chosen_logits = ref_combined_logits[:chosen_ids.size(0)]
+                ref_rejected_logits = ref_combined_logits[chosen_ids.size(0):]
                 
                 ref_chosen_logps = get_batch_logps(ref_chosen_logits, chosen_labels)
                 ref_rejected_logps = get_batch_logps(ref_rejected_logits, rejected_labels)
                 
         # Forward Policy Model (Active Training)
-        with autocast():
-            policy_chosen_logits = self.policy_model(chosen_ids)
-            policy_rejected_logits = self.policy_model(rejected_ids)
+        with torch.amp.autocast('cuda'):
+            policy_combined_logits = self.policy_model(combined_ids)
+            
+            policy_chosen_logits = policy_combined_logits[:chosen_ids.size(0)]
+            policy_rejected_logits = policy_combined_logits[chosen_ids.size(0):]
             
             policy_chosen_logps = get_batch_logps(policy_chosen_logits, chosen_labels)
             policy_rejected_logps = get_batch_logps(policy_rejected_logits, rejected_labels)

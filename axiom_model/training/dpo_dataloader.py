@@ -20,6 +20,7 @@ def dpo_collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tens
     """
     chosen_len = max(len(item["chosen_ids"]) for item in batch)
     rejected_len = max(len(item["rejected_ids"]) for item in batch)
+    max_len = max(chosen_len, rejected_len)
     
     # cl100k_base eot_token is 100257. We use this as pad_id to prevent embedding noise.
     pad_id = 100257
@@ -36,14 +37,14 @@ def dpo_collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tens
         r_ids = item["rejected_ids"]
         r_labels = item["rejected_labels"]
         
-        # Pad chosen sequences
-        c_pad = chosen_len - len(c_ids)
+        # Pad chosen sequences to max_len
+        c_pad = max_len - len(c_ids)
         if c_pad > 0:
             c_ids = torch.cat([c_ids, torch.full((c_pad,), pad_id, dtype=torch.long)])
             c_labels = torch.cat([c_labels, torch.full((c_pad,), ignore_index, dtype=torch.long)])
             
-        # Pad rejected sequences
-        r_pad = rejected_len - len(r_ids)
+        # Pad rejected sequences to max_len
+        r_pad = max_len - len(r_ids)
         if r_pad > 0:
             r_ids = torch.cat([r_ids, torch.full((r_pad,), pad_id, dtype=torch.long)])
             r_labels = torch.cat([r_labels, torch.full((r_pad,), ignore_index, dtype=torch.long)])
