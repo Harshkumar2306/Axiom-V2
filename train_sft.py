@@ -49,6 +49,7 @@ def parse_args():
     parser.add_argument('--data', type=str, default=None, help='Override path to sft_data.pt')
     parser.add_argument('--pretrained', type=str, default='./checkpoints/best.pt', help='Path to pretrained base checkpoint')
     parser.add_argument('--save_dir', type=str, default='./checkpoints_sft', help='Checkpoint output directory')
+    parser.add_argument('--replay_data', type=str, default=None, help='Path to train.bin for 10% Mixed Replay SFT')
     return parser.parse_args()
 
 def main():
@@ -111,19 +112,30 @@ def main():
     })
 
     sft_data_path = args.data or sft_cfg.get('data_path', "./dataset/sft/sft_data.pt")
-    train_loader, train_sampler = create_sft_dataloader(
+    
+    if is_rank_zero and args.replay_data:
+        logger.info(f"EXPERIMENT B DETECTED: Initializing Mixed Replay Dataloader (90% SFT / 10% Pretrain)")
+        logger.info(f" - SFT: {sft_data_path}")
+        logger.info(f" - Replay: {args.replay_data}")
+    elif is_rank_zero:
+        logger.info(f"EXPERIMENT A DETECTED: Initializing Pure SFT Dataloader (100% SFT)")
+        
+    train_loader, _ = create_sft_dataloader(
         sft_data_path,
         batch_size=sft_cfg.get('batch_size', train_cfg.get('batch_size', 4)),
         is_distributed=is_distributed,
-        is_train=True
+        is_train=True,
+        replay_data_path=args.replay_data,
+        seq_len=model_cfg['max_seq_len']
     )
 
-    # We use the same file for val for now, or you can split the dataset later
+    # We use the pure SFT dataset for validation regardless of experiment type
     val_loader, _ = create_sft_dataloader(
         sft_data_path,
         batch_size=sft_cfg.get('batch_size', train_cfg.get('batch_size', 4)),
         is_distributed=is_distributed,
-        is_train=False
+        is_train=False,
+        replay_data_path=None
     )
 
     ckpt_mgr = CheckpointManager(save_dir=args.save_dir)
@@ -166,38 +178,14 @@ def main():
         logger.info(f"Starting Phase 4 Supervised Fine-Tuning from optimizer step {start_step}...")
         logger.info(f"SFT config: lr={sft_lr:.2e} | max_steps={max_opt_steps} | grad_accum={grad_accum} | eval every {eval_interval} steps")
 
-    if train_sampler:
-        train_sampler.set_epoch(start_epoch)
+    train_loader.set_epoch(start_epoch)
 
     # Fast-forward iterator if resuming (start_step is in optimizer steps,
     # each of which consumed `grad_accum` micro-batches).
     if start_step > 0:
-        if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {start_step} steps instantly via Sampler slicing...")
+        if is_rank_zero: logger.info(f"Fast-forwarding dataloader by {start_step} steps instantly via Modulo Sampler slicing...")
         batches_to_skip = start_step * grad_accum
-        class FastForwardSampler:
-            def __init__(self, base_sampler, skip_batches, batch_size):
-                self.base_sampler = base_sampler
-                self.skip_items = skip_batches * batch_size
-            def __iter__(self):
-                it = iter(self.base_sampler)
-                import itertools
-                list(itertools.islice(it, self.skip_items))
-                return it
-            def __len__(self):
-                return len(self.base_sampler) - self.skip_items
-            def set_epoch(self, epoch):
-                if hasattr(self.base_sampler, 'set_epoch'):
-                    self.base_sampler.set_epoch(epoch)
-                    
-        train_sampler = FastForwardSampler(train_loader.sampler, batches_to_skip, train_loader.batch_size)
-        train_loader = torch.utils.data.DataLoader(
-            train_loader.dataset,
-            batch_size=train_loader.batch_size,
-            sampler=train_sampler,
-            num_workers=train_loader.num_workers,
-            pin_memory=train_loader.pin_memory,
-            drop_last=train_loader.drop_last
-        )
+        train_loader.fast_forward(batches_to_skip)
         
     train_iter = iter(train_loader)
 
@@ -221,7 +209,7 @@ def main():
                 x, y = next(train_iter)
             except StopIteration:
                 start_epoch += 1
-                if train_sampler: train_sampler.set_epoch(start_epoch)
+                train_loader.set_epoch(start_epoch)
                 train_iter = iter(train_loader)
                 x, y = next(train_iter)
 
