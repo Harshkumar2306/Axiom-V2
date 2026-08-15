@@ -6,6 +6,10 @@ class MetricsCalculator:
     @staticmethod
     def compute_loss(logits, targets):
         # Assumes logits are [B, T, V] and targets are [B, T]
+        # Check if the entire sequence is masked (which happens if long prompts get truncated)
+        if not (targets != -100).any():
+            return logits.sum() * 0.0
+            
         # Flatten for cross_entropy
         return F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
 
