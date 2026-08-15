@@ -1,0 +1,13 @@
+{
+    "phase": "2_inference_engine",
+    "status": "FROZEN",
+    "git_commit": "8b091b1",
+    "tests_passed": [
+        "KV vs. no-KV equivalence",
+        "RoPE position correctness",
+        "4095-token boundary",
+        "4096-token handling",
+        "Temperature / Top-K / Top-P",
+        "KV-cache performance"
+    ]
+}

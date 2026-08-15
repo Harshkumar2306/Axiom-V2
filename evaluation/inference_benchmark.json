@@ -1,0 +1,11 @@
+{
+    "benchmark": "Phase 2 Inference Speed",
+    "hardware": "Kaggle T4 x2 (Single GPU utilized)",
+    "context_length": 4096,
+    "model_size": "476M",
+    "metrics": {
+        "no_kv_cache_tokens_per_sec": 33.44,
+        "kv_cache_tokens_per_sec": 43.28,
+        "speedup_factor": 1.29
+    }
+}

@@ -1,0 +1,2 @@
+git_commit,model_params,validation_loss,context_length,no_kv_tok_s,kv_tok_s,kv_speedup
+8b091b1,476M,3.04367,4096,33.44,43.28,1.29x
