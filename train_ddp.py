@@ -185,14 +185,17 @@ def main():
         class FastForwardSampler:
             def __init__(self, base_sampler, skip_batches, batch_size):
                 self.base_sampler = base_sampler
-                self.skip_items = skip_batches * batch_size
+                self.total_items = len(base_sampler)
+                total_skip = skip_batches * batch_size
+                self.skip_items = total_skip % self.total_items
             def __iter__(self):
                 it = iter(self.base_sampler)
                 import itertools
                 list(itertools.islice(it, self.skip_items))
+                self.skip_items = 0  # Only skip on the very first iteration
                 return it
             def __len__(self):
-                return len(self.base_sampler) - self.skip_items
+                return self.total_items - self.skip_items
             def set_epoch(self, epoch):
                 if hasattr(self.base_sampler, 'set_epoch'):
                     self.base_sampler.set_epoch(epoch)
