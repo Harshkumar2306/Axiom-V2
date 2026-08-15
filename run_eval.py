@@ -169,16 +169,28 @@ if __name__ == "__main__":
         batch_size=1
     )
     
-    print("\n" + "="*60)
-    print("🎉 BASELINE EVALUATION COMPLETE")
-    print("="*60)
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich.text import Text
+
+    console = Console()
+    console.print(Panel(Text("🚀 PHASE 3 BASELINE EVALUATION COMPLETE", justify="center", style="bold green"), border_style="green"))
     
-    # Simple console dump
+    table = Table(title="Axiom V2 (476M) - Immutable Control Baseline", show_header=True, header_style="bold magenta")
+    table.add_column("Benchmark", style="cyan", justify="left")
+    table.add_column("Metric", style="yellow", justify="left")
+    table.add_column("Score", style="bold white", justify="right")
+    
     for task_name, task_metrics in results['results'].items():
-        print(f"\nTask: {task_name}")
         for k, v in task_metrics.items():
+            if k == "alias": continue
             if not k.endswith("stderr"):
-                print(f"  {k}: {v:.4f}")
+                # Handle lists/dicts if any, otherwise format float
+                val_str = f"{v:.4f}" if isinstance(v, float) else str(v)
+                table.add_row(task_name.upper(), k, val_str)
+                
+    console.print(table)
                 
     # Save to disk
     os.makedirs("evaluation", exist_ok=True)
