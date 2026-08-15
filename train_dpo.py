@@ -133,11 +133,11 @@ def main():
     )
 
     ckpt_mgr = CheckpointManager(save_dir=args.save_dir)
-    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == 'cuda'))
+    scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
 
     trainer = DPOTrainer(policy_model, ref_model, optimizer, scaler, beta=args.beta)
     train_logger = TrainingLogger(use_wandb=False, max_steps=max_opt_steps) if is_rank_zero else None
-    profiler = Profiler(device)
+    profiler = Profiler()
 
     grad_accum = train_cfg.get('grad_accum_steps', 4)
     log_interval = 5
