@@ -18,8 +18,11 @@ def dpo_collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tens
     Dynamically pads the chosen and rejected sequences independently within the batch.
     This saves massive amounts of GPU memory compared to padding everything to 4096.
     """
-    chosen_len = max(len(item["chosen_ids"]) for item in batch)
-    rejected_len = max(len(item["rejected_ids"]) for item in batch)
+    # Kaggle T4 OOM Safety: Hard limit DPO sequences to 1024 tokens.
+    MAX_DPO_SEQ_LEN = 1024
+    
+    chosen_len = min(MAX_DPO_SEQ_LEN, max(len(item["chosen_ids"]) for item in batch))
+    rejected_len = min(MAX_DPO_SEQ_LEN, max(len(item["rejected_ids"]) for item in batch))
     max_len = max(chosen_len, rejected_len)
     
     # cl100k_base eot_token is 100257. We use this as pad_id to prevent embedding noise.
@@ -32,10 +35,10 @@ def dpo_collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tens
     batch_rejected_labels = []
     
     for item in batch:
-        c_ids = item["chosen_ids"]
-        c_labels = item["chosen_labels"]
-        r_ids = item["rejected_ids"]
-        r_labels = item["rejected_labels"]
+        c_ids = item["chosen_ids"][:MAX_DPO_SEQ_LEN]
+        c_labels = item["chosen_labels"][:MAX_DPO_SEQ_LEN]
+        r_ids = item["rejected_ids"][:MAX_DPO_SEQ_LEN]
+        r_labels = item["rejected_labels"][:MAX_DPO_SEQ_LEN]
         
         # Pad chosen sequences to max_len
         c_pad = max_len - len(c_ids)
