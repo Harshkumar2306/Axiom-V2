@@ -195,6 +195,6 @@ if __name__ == "__main__":
     # Save to disk
     os.makedirs("evaluation", exist_ok=True)
     with open("evaluation/baseline_report.json", "w") as f:
-        json.dump(results, f, indent=4)
+        json.dump(results, f, indent=4, default=str)
         
     print("\n✅ Baseline metrics saved to evaluation/baseline_report.json")
