@@ -65,6 +65,9 @@ class DPOTrainer:
                 ref_chosen_logps = get_batch_logps(ref_chosen_logits, chosen_labels)
                 ref_rejected_logps = get_batch_logps(ref_rejected_logits, rejected_labels)
                 
+        # >>> VRAM SAFETY: Aggressively free massive logit tensors before Policy forward pass <<<
+        del ref_combined_logits, ref_chosen_logits, ref_rejected_logits
+        
         # Forward Policy Model (Active Training)
         with torch.amp.autocast('cuda'):
             policy_combined_logits = self.policy_model(combined_ids)
