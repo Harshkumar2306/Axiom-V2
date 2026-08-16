@@ -19,7 +19,7 @@ class CheckpointManager:
         try:
             stat = shutil.disk_usage(self.save_dir)
             free_gb = stat.free / (1024 ** 3)
-            if free_gb < 8.0:
+            if free_gb < 3.0:
                 logger.error(f"[Disk Safety] Only {free_gb:.2f} GB free. Aborting checkpoint save to prevent corruption.")
                 return
         except Exception as e:
