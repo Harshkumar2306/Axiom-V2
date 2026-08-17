@@ -60,7 +60,7 @@ class StandardSFTLoader(BaseSFTLoader):
             sampler=sampler,
             shuffle=(sampler is None and self.is_train),
             num_workers=0,
-            pin_memory=torch.cuda.is_available(),
+            pin_memory=False,
             drop_last=True
         )
 
@@ -88,7 +88,7 @@ class MixedReplayDataloader(BaseSFTLoader):
         self.pretrain_loader = DataLoader(
             pretrain_dataset, batch_size=batch_size, sampler=self.pretrain_sampler,
             shuffle=(self.pretrain_sampler is None and is_train),
-            num_workers=0, pin_memory=torch.cuda.is_available(), drop_last=True
+            num_workers=0, pin_memory=False, drop_last=True
         )
         self.pretrain_batch_size = batch_size
         
@@ -109,7 +109,7 @@ class MixedReplayDataloader(BaseSFTLoader):
             ff_pretrain = FastForwardSampler(self.pretrain_sampler, items_to_skip)
             self.pretrain_loader = DataLoader(
                 self.pretrain_loader.dataset, batch_size=self.pretrain_batch_size,
-                sampler=ff_pretrain, num_workers=0, pin_memory=torch.cuda.is_available(), drop_last=True
+                sampler=ff_pretrain, num_workers=0, pin_memory=False, drop_last=True
             )
 
     def set_epoch(self, epoch):

@@ -7,6 +7,7 @@ import argparse
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import logging
+import gc
 
 from axiom_model.core.model import AxiomV2
 from axiom_model.training.trainer import Trainer
@@ -155,6 +156,9 @@ def main():
             model.module.load_state_dict(state['model'])
         else:
             model.load_state_dict(state['model'])
+            
+        del state
+        gc.collect()
     else:
         if is_rank_zero: logger.warning(f"Base model not found at {pretrained_path}. Training from scratch!")
 

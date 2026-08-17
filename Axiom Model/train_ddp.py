@@ -206,7 +206,7 @@ def main():
             batch_size=train_loader.batch_size,
             sampler=train_sampler,
             num_workers=train_loader.num_workers,
-            pin_memory=train_loader.pin_memory,
+            pin_memory=False,
             drop_last=train_loader.drop_last
         )
         
