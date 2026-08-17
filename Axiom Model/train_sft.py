@@ -17,7 +17,7 @@ from axiom_model.training.logger import TrainingLogger
 from axiom_model.training.scheduler import SchedulerManager
 from axiom_model.utils.reproducibility import set_seed
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', force=True, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 pause_requested = False
@@ -181,18 +181,22 @@ def main():
 
     if is_rank_zero:
         total_params = sum(p.numel() for p in model.parameters()) / 1e6
-        logger.info("\n" + "="*50)
-        logger.info(f"🚀 AXIOM V2 PHASE 4 SFT ENGINE IGNITED")
-        logger.info("="*50)
-        logger.info(f"Model       : {total_params:.1f}M Parameters")
-        logger.info(f"Base Brain  : {args.pretrained}")
-        logger.info(f"Dataset     : {sft_data_path} ({len(train_loader.dataset):,} Samples)")
-        logger.info(f"Learning Rate: {sft_lr:.2e} (10% Cosine Warmup)")
-        logger.info(f"Total Steps : {max_opt_steps} Steps (1 Epoch)")
-        logger.info(f"GPUs        : {world_size}x GPUs (Batch: {train_cfg.get('batch_size', 1)} x {grad_accum} Accum)")
-        logger.info(f"Output Dir  : {args.save_dir}")
-        logger.info("="*50 + "\n")
-        logger.info(f"Starting Phase 4 Supervised Fine-Tuning from optimizer step {start_step}...")
+        banner = (
+            "\n" + "="*50 + "\n"
+            f"🚀 AXIOM V2 PHASE 4 SFT ENGINE IGNITED\n"
+            + "="*50 + "\n"
+            f"Model        : {total_params:.1f}M Parameters\n"
+            f"Base Brain   : {args.pretrained}\n"
+            f"Dataset      : {sft_data_path} ({len(train_loader.dataset):,} Samples)\n"
+            f"Learning Rate: {sft_lr:.2e} (10% Cosine Warmup)\n"
+            f"Total Steps  : {max_opt_steps} Steps (1 Epoch)\n"
+            f"GPUs         : {world_size}x GPUs (Batch: {train_cfg.get('batch_size', 1)} x {grad_accum} Accum)\n"
+            f"Output Dir   : {args.save_dir}\n"
+            + "="*50 + "\n"
+            f"Starting Phase 4 Supervised Fine-Tuning from optimizer step {start_step}...\n"
+        )
+        print(banner, flush=True)
+        logger.info(banner)
 
     train_loader.set_epoch(start_epoch)
 

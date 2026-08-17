@@ -1,12 +1,14 @@
 import os
+import sys
 import csv
 import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', force=True, stream=sys.stdout)
+logger = logging.getLogger(__name__)
 
 # wandb is imported lazily inside TrainingLogger so that environments without
 # it installed can still train with use_wandb=False.
 wandb = None
-
-logger = logging.getLogger(__name__)
 
 class TrainingLogger:
     def __init__(self, log_dir="./logs", use_wandb=False, config=None, max_steps=100000):
@@ -44,6 +46,7 @@ class TrainingLogger:
                 eta_hours = eta_sec / 3600
                 log_str += f" | Time: {time_sec:.2f}s | ETA: {eta_hours:.1f}h"
         logger.info(log_str)
+        print(log_str, flush=True)
         
         # Write to CSV
         with open(self.metrics_file, mode='a', newline='') as f:
