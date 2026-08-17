@@ -68,7 +68,7 @@ def main():
     enc = tiktoken.get_encoding("cl100k_base")
     
     logger.info("Loading ehartford/dolphin uncensored dataset (37,000 samples)...")
-    ds_orca = load_dataset("ehartford/dolphin", split="train[:37000]")
+    ds_orca = load_dataset("ehartford/dolphin", "flan1m-alpaca-uncensored", split="train[:37000]")
     
     logger.info("Loading OpenAssistant (12,900 samples) for chat smoothness...")
     ds_oa = load_dataset("OpenAssistant/oasst_top1_2023-08-25", split="train")
