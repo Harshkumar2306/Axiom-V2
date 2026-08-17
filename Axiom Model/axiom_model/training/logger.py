@@ -3,7 +3,7 @@ import sys
 import csv
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', force=True, stream=sys.stdout)
+logging.basicConfig(level=logging.INFO, format='%(message)s', force=True, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 # wandb is imported lazily inside TrainingLogger so that environments without

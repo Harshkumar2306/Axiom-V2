@@ -18,7 +18,7 @@ from axiom_model.training.logger import TrainingLogger
 from axiom_model.training.scheduler import SchedulerManager
 from axiom_model.utils.reproducibility import set_seed
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', force=True, stream=sys.stdout)
+logging.basicConfig(level=logging.INFO, format='%(message)s', force=True, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 pause_requested = False
