@@ -89,6 +89,9 @@ def generate(model, enc, prompt, max_new_tokens, temperature=0.7, top_k=50, top_
             if stream:
                 print(enc.decode([idx_next.item()]), end="", flush=True)
                 
+            if idx_next.item() == 100257: # <|endoftext|> token
+                break
+                
     t1 = time.perf_counter()
     speed = len(generated_tokens) / (t1 - t0) if (t1 - t0) > 0 else 0
     if stream:
