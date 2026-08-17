@@ -8,6 +8,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import logging
 from copy import deepcopy
+import gc
 
 from axiom_model.core.model import AxiomV2
 from axiom_model.training.dpo_trainer import DPOTrainer
@@ -101,6 +102,9 @@ def main():
         state = torch.load(pretrained_path, map_location='cpu', weights_only=False)
         policy_model.load_state_dict(state['model'])
         ref_model.load_state_dict(state['model'])
+        
+        del state
+        gc.collect()
     else:
         if is_rank_zero: logger.error(f"FATAL: DPO requires an SFT model, but {pretrained_path} was not found.")
         sys.exit(1)
