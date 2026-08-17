@@ -16,7 +16,9 @@ def check_and_clear_space():
     if os.path.exists(checkpoints_dir):
         print(f"Clearing old checkpoints in {checkpoints_dir} to free up space...")
         for f in os.listdir(checkpoints_dir):
-            if "tmp" in f or "latest" in f:
+            # Only delete failed .tmp files. Do NOT delete latest.pt or best.pt 
+            # otherwise the training cannot resume!
+            if ".tmp" in f:
                 os.remove(os.path.join(checkpoints_dir, f))
                 print(f"Deleted {f}")
 
