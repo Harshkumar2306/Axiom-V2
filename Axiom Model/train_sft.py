@@ -172,13 +172,27 @@ def main():
     evaluator = Evaluator(model, val_loader, device, is_distributed, config)
     train_logger = TrainingLogger(use_wandb=False, max_steps=max_opt_steps) if is_rank_zero else None
 
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     grad_accum = trainer.grad_accum_steps
     eval_interval = int(sft_cfg.get('eval_interval', 50))
-    log_interval = int(sft_cfg.get('log_interval', 10))
+    log_interval = int(sft_cfg.get('log_interval', 1))
 
     if is_rank_zero:
+        total_params = sum(p.numel() for p in model.parameters()) / 1e6
+        logger.info("\n" + "="*50)
+        logger.info(f"🚀 AXIOM V2 PHASE 4 SFT ENGINE IGNITED")
+        logger.info("="*50)
+        logger.info(f"Model       : {total_params:.1f}M Parameters")
+        logger.info(f"Base Brain  : {args.pretrained}")
+        logger.info(f"Dataset     : {sft_data_path} ({len(train_loader.dataset):,} Samples)")
+        logger.info(f"Learning Rate: {sft_lr:.2e} (10% Cosine Warmup)")
+        logger.info(f"Total Steps : {max_opt_steps} Steps (1 Epoch)")
+        logger.info(f"GPUs        : {world_size}x GPUs (Batch: {train_cfg.get('batch_size', 1)} x {grad_accum} Accum)")
+        logger.info(f"Output Dir  : {args.save_dir}")
+        logger.info("="*50 + "\n")
         logger.info(f"Starting Phase 4 Supervised Fine-Tuning from optimizer step {start_step}...")
-        logger.info(f"SFT config: lr={sft_lr:.2e} | max_steps={max_opt_steps} | grad_accum={grad_accum} | eval every {eval_interval} steps")
 
     train_loader.set_epoch(start_epoch)
 
