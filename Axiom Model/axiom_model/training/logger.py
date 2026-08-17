@@ -46,7 +46,6 @@ class TrainingLogger:
                 eta_hours = eta_sec / 3600
                 log_str += f" | Time: {time_sec:.2f}s | ETA: {eta_hours:.1f}h"
         logger.info(log_str)
-        print(log_str, flush=True)
         
         # Write to CSV
         with open(self.metrics_file, mode='a', newline='') as f:

@@ -199,7 +199,6 @@ def main():
             + "="*50 + "\n"
             f"Starting Phase 4 Supervised Fine-Tuning from optimizer step {start_step}...\n"
         )
-        print(banner, flush=True)
         logger.info(banner)
 
     train_loader.set_epoch(start_epoch)
