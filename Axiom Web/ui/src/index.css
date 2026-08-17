@@ -1,0 +1,72 @@
+:root {
+  --bg-color: #0f1115;
+  --text-main: #f0f2f5;
+  --text-dim: #9ba1a6;
+  --accent: #5e6ad2;
+  --accent-hover: #7b87ff;
+  
+  --glass-bg: rgba(25, 28, 35, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  
+  --user-msg-bg: rgba(94, 106, 210, 0.15);
+  --bot-msg-bg: transparent;
+  
+  font-family: 'Inter', -apple-system, sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+  
+  color-scheme: dark;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  background-image: radial-gradient(circle at 50% 0%, rgba(94,106,210,0.1) 0%, transparent 50%);
+}
+
+#root {
+  width: 100%;
+  max-width: 900px;
+  height: 100%;
+  position: relative;
+}
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 10px rgba(94, 106, 210, 0.4); }
+  100% { box-shadow: 0 0 20px rgba(94, 106, 210, 0.8); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--glass-border);
+  border-radius: 10px;
+}

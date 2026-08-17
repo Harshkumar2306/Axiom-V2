@@ -7,7 +7,10 @@ from axiom_model.training.dataloader import MemmapDataset
 
 class SFTDataset(Dataset):
     def __init__(self, data_path):
-        data = torch.load(data_path, map_location='cpu')
+        try:
+            data = torch.load(data_path, map_location='cpu', weights_only=False)
+        except TypeError:
+            data = torch.load(data_path, map_location='cpu')
         self.input_ids = data['input_ids']
         self.labels = data['labels']
         

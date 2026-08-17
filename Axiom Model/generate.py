@@ -165,9 +165,9 @@ def run_validation_suite(model, enc):
 
 def load_model(checkpoint_path, device):
     try:
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     except TypeError:
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, map_location='cpu')
         
     model_cfg = checkpoint['config']['model']
     model = AxiomV2(
@@ -191,7 +191,7 @@ def load_model(checkpoint_path, device):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Axiom V2 Inference Engine")
     parser.add_argument("--checkpoint", type=str, default="checkpoints/best.pt", help="Path to checkpoint")
-    parser.add_argument("--prompt", type=str, default="The secret to artificial intelligence is", help="Generation prompt")
+    parser.add_argument("--prompt", type=str, default="### System:\nYou are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n### User:\nThe secret to artificial intelligence is\n\n### Assistant:\n", help="Generation prompt")
     parser.add_argument("--max_new_tokens", type=int, default=200, help="Number of tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.7, help="Temperature for sampling")
     parser.add_argument("--top_k", type=int, default=50, help="Top-K sampling cutoff")
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
     print(f"Initializing Axiom V2 on {device}...")
     enc = tiktoken.get_encoding("cl100k_base")
     

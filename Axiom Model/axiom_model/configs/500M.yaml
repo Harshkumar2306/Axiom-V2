@@ -36,8 +36,8 @@ scheduler:
 sft:
   data_path: "./dataset/sft/sft_data.pt"
   learning_rate: 2.0e-5  # ~10x smaller than pretraining LR
-  max_steps: 500         # optimizer steps (not micro-batches)
-  eval_interval: 50      # optimizer steps between evals
+  max_steps: 1562        # optimizer steps for 1 Epoch of 50K dataset (batch=32)
+  eval_interval: 100     # optimizer steps between evals
   log_interval: 10
   eval_iters: 50
   eta_min: 1.0e-6

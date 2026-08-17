@@ -47,7 +47,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Axiom V2 Supervised Fine-Tuning')
     parser.add_argument('--config', type=str, default='axiom_model/configs/500M.yaml', help='Path to config file')
     parser.add_argument('--data', type=str, default=None, help='Override path to sft_data.pt')
-    parser.add_argument('--pretrained', type=str, default='./checkpoints/best.pt', help='Path to pretrained base checkpoint')
+    parser.add_argument('--pretrained', type=str, default='./best.pt', help='Path to pretrained base checkpoint')
     parser.add_argument('--save_dir', type=str, default='./checkpoints_sft', help='Checkpoint output directory')
     parser.add_argument('--replay_data', type=str, default=None, help='Path to train.bin for 10% Mixed Replay SFT')
     parser.add_argument('--max_steps', type=int, default=None, help='Override max optimization steps')
@@ -107,9 +107,10 @@ def main():
     # Plain cosine decay (no warm restarts) for SFT.
     max_opt_steps = args.max_steps if args.max_steps is not None else int(sft_cfg.get('max_steps', 500))
     scheduler_mgr = SchedulerManager(optimizer, {
-        "type": "cosine",
-        "T_max": max_opt_steps,
-        "eta_min": float(sft_cfg.get('eta_min', 1e-6)),
+        "type": "cosine_warmup",
+        "warmup_steps": int(max_opt_steps * 0.1),
+        "max_steps": max_opt_steps,
+        "eta_min_ratio": 0.05,
     })
 
     sft_data_path = args.data or sft_cfg.get('data_path', "./dataset/sft/sft_data.pt")

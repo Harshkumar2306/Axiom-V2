@@ -5,7 +5,10 @@ from typing import List, Dict
 
 class DPODataset(Dataset):
     def __init__(self, data_path: str):
-        self.data = torch.load(data_path, map_location='cpu')
+        try:
+            self.data = torch.load(data_path, map_location='cpu', weights_only=False)
+        except TypeError:
+            self.data = torch.load(data_path, map_location='cpu')
         
     def __len__(self):
         return len(self.data)
@@ -78,7 +81,7 @@ def create_dpo_dataloader(data_path: str, batch_size: int, is_distributed: bool,
         sampler=sampler,
         collate_fn=dpo_collate_fn,
         pin_memory=True,
-        num_workers=2,
+        num_workers=0, # Set to 0 to prevent /dev/shm deadlocks on Kaggle multi-GPU
         drop_last=is_train
     )
     

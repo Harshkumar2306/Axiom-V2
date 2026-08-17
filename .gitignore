@@ -19,7 +19,15 @@ ENV/
 
 # Datasets and checkpoints
 data/
+dataset/
+checkpoints/
+checkpoints_sft/
+checkpoints_dpo/
 runs/
 *.pt
 *.pth
 *.bin
+
+# Web dependencies
+node_modules/
+dist/

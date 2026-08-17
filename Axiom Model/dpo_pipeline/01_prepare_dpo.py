@@ -8,29 +8,28 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def create_chatml_dpo(system_msg, question, answer):
+def create_markdown_dpo(question, answer):
     """
-    Builds the exact ChatML prompt and response strings for DPO.
+    Builds the exact Markdown prompt and response strings for DPO, matching Phase 4.
     """
-    sys_str = f"<|im_start|>system\n{system_msg}<|im_end|>\n" if system_msg else ""
-    prompt = f"{sys_str}<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n"
-    response = f"{answer}<|im_end|>"
+    sys_str = "### System:\nYou are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n"
+    prompt = f"{sys_str}### User:\n{question}\n\n### Assistant:\n"
+    response = f"{answer}<|endoftext|>"
     return prompt, response
 
 def main():
     tokenizer = tiktoken.get_encoding("cl100k_base")
     IGNORE_INDEX = -100 # Mask for the prompt tokens (we don't train on the question)
 
-    logger.info("Loading Intel/orca_dpo_pairs dataset...")
-    # Load the high-quality DPO dataset (Chosen vs Rejected answers)
-    dataset = load_dataset("Intel/orca_dpo_pairs", split="train")
+    logger.info("Loading jondurbin/truthy-dpo-v0.1 uncensored dataset...")
+    # Load the high-quality uncensored DPO dataset (Chosen vs Rejected answers)
+    dataset = load_dataset("jondurbin/truthy-dpo-v0.1", split="train")
     
     logger.info(f"Loaded {len(dataset)} DPO pairs. Tokenizing...")
     
     dpo_data = []
     
     for item in tqdm(dataset, desc="Tokenizing DPO Pairs"):
-        sys_msg = item.get("system", "")
         question = item.get("question", "")
         chosen = item.get("chosen", "")
         rejected = item.get("rejected", "")
@@ -39,13 +38,13 @@ def main():
         if not question or not chosen or not rejected:
             continue
             
-        prompt, chosen_resp = create_chatml_dpo(sys_msg, question, chosen)
-        _, rejected_resp = create_chatml_dpo(sys_msg, question, rejected)
+        prompt, chosen_resp = create_markdown_dpo(question, chosen)
+        _, rejected_resp = create_markdown_dpo(question, rejected)
         
         # Tokenize
-        prompt_ids = tokenizer.encode(prompt, allowed_special={"<|im_start|>", "<|im_end|>"})
-        chosen_resp_ids = tokenizer.encode(chosen_resp, allowed_special={"<|im_start|>", "<|im_end|>"})
-        rejected_resp_ids = tokenizer.encode(rejected_resp, allowed_special={"<|im_start|>", "<|im_end|>"})
+        prompt_ids = tokenizer.encode(prompt, allowed_special={"<|endoftext|>"})
+        chosen_resp_ids = tokenizer.encode(chosen_resp, allowed_special={"<|endoftext|>"})
+        rejected_resp_ids = tokenizer.encode(rejected_resp, allowed_special={"<|endoftext|>"})
         
         # Concatenate prompt and responses
         chosen_ids = prompt_ids + chosen_resp_ids
