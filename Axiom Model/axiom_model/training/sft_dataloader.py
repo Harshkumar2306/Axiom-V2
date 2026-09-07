@@ -82,6 +82,7 @@ class StandardSFTLoader(BaseSFTLoader):
 class MixedReplayDataloader(BaseSFTLoader):
     def __init__(self, sft_path, pretrain_path, batch_size, seq_len=4096, is_distributed=True, is_train=True):
         self.sft_engine = StandardSFTLoader(SFTDataset(sft_path), batch_size, is_distributed, is_train)
+        self.dataset = self.sft_engine.dataset
         
         pretrain_dataset = MemmapDataset(pretrain_path, seq_len)
         self.pretrain_sampler = DistributedSampler(pretrain_dataset, shuffle=is_train) if is_distributed else None

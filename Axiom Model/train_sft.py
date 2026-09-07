@@ -185,13 +185,14 @@ def main():
 
     if is_rank_zero:
         total_params = sum(p.numel() for p in model.parameters()) / 1e6
+        num_samples = len(train_loader.dataset) if hasattr(train_loader, 'dataset') else len(getattr(train_loader, 'sft_engine', {}).dataset)
         banner = (
             "\n" + "="*50 + "\n"
             f"🚀 AXIOM V2 PHASE 4 SFT ENGINE IGNITED\n"
             + "="*50 + "\n"
             f"Model        : {total_params:.1f}M Parameters\n"
             f"Base Brain   : {args.pretrained}\n"
-            f"Dataset      : {sft_data_path} ({len(train_loader.dataset):,} Samples)\n"
+            f"Dataset      : {sft_data_path} ({num_samples:,} Samples)\n"
             f"Learning Rate: {sft_lr:.2e} (10% Cosine Warmup)\n"
             f"Total Steps  : {max_opt_steps} Steps (1 Epoch)\n"
             f"GPUs         : {world_size}x GPUs (Batch: {train_cfg.get('batch_size', 1)} x {grad_accum} Accum)\n"
