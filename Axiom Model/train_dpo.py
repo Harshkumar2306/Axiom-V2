@@ -139,21 +139,36 @@ def main():
     ckpt_mgr = CheckpointManager(save_dir=args.save_dir)
     scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
 
-    trainer = DPOTrainer(policy_model, ref_model, optimizer, scaler, beta=args.beta)
-    train_logger = TrainingLogger(use_wandb=False, max_steps=max_opt_steps) if is_rank_zero else None
-    profiler = Profiler()
-
     grad_accum = train_cfg.get('grad_accum_steps', 4)
     log_interval = 5
 
+    trainer = DPOTrainer(policy_model, ref_model, optimizer, scaler, beta=args.beta, grad_accum_steps=grad_accum)
+    train_logger = TrainingLogger(use_wandb=False, max_steps=max_opt_steps) if is_rank_zero else None
+    profiler = Profiler()
+
+    # Support checkpoint resuming
+    start_epoch, start_step, loaded_best_loss = ckpt_mgr.load(
+        policy_model, optimizer, scheduler_mgr, scaler,
+        path=os.path.join(args.save_dir, "latest.pt")
+    )
+    best_loss = loaded_best_loss if loaded_best_loss < float('inf') else float('inf')
+
     if is_rank_zero:
-        logger.info(f"Starting Phase 5 Direct Preference Optimization (DPO)...")
+        logger.info(f"Starting Phase 5 Direct Preference Optimization (DPO) from step {start_step}...")
         logger.info(f"DPO config: lr={dpo_lr:.2e} | beta={args.beta} | max_steps={max_opt_steps} | grad_accum={grad_accum}")
 
-    train_iter = iter(train_loader)
-    best_loss = float('inf')
+    # Fast-forward dataloader iterator if resuming
+    if start_step > 0:
+        batches_to_skip = start_step * grad_accum
+        for _ in range(batches_to_skip):
+            try:
+                next(iter(train_loader))
+            except StopIteration:
+                break
 
-    for opt_step in range(max_opt_steps):
+    train_iter = iter(train_loader)
+
+    for opt_step in range(start_step, max_opt_steps):
         # Check for pause file
         pause_tensor = torch.tensor([1 if (is_rank_zero and os.path.exists("pause.flag")) else 0], device=device)
         if is_distributed: dist.broadcast(pause_tensor, src=0)
@@ -229,6 +244,9 @@ def main():
                 is_best = avg_loss < best_loss
                 if is_best: best_loss = avg_loss
                 ckpt_mgr.save(policy_model, optimizer, scheduler_mgr, scaler, 0, current_step, best_loss, config, is_best=is_best)
+
+        if is_distributed and (current_step % 100 == 0 or current_step == max_opt_steps):
+            dist.barrier()
 
         # Graceful Pause Exit
         if pause_requested:

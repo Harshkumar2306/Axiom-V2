@@ -35,12 +35,14 @@ class DPOTrainer:
     Direct Preference Optimization (DPO) Math Engine.
     Executes the implicit reward modeling loss function without needing an actual reward model.
     """
-    def __init__(self, policy_model, ref_model, optimizer, scaler, beta=0.1):
+    def __init__(self, policy_model, ref_model, optimizer, scaler, beta=0.1, grad_accum_steps=1, clip_grad=1.0):
         self.policy_model = policy_model
         self.ref_model = ref_model
         self.optimizer = optimizer
         self.scaler = scaler
         self.beta = beta
+        self.grad_accum_steps = grad_accum_steps
+        self.clip_grad = clip_grad
         
         # Security Lock: Reference model must be absolutely frozen
         self.ref_model.eval()
@@ -92,14 +94,21 @@ class DPOTrainer:
             rejected_rewards = (self.beta * (policy_rejected_logps - ref_rejected_logps)).detach()
             reward_margins = chosen_rewards - rejected_rewards
 
+            raw_loss = loss.item()
+            # Mathematically scale loss by accumulation steps so accumulated gradients are normalized
+            loss = loss / self.grad_accum_steps
+
         self.scaler.scale(loss).backward()
         
         grad_norm = None
         if is_last_accum_step:
             self.scaler.unscale_(self.optimizer)
-            grad_norm = clip_grad_norm_(self.policy_model.parameters(), 1.0)
+            grad_norm = clip_grad_norm_(self.policy_model.parameters(), self.clip_grad)
+            if not torch.isfinite(grad_norm):
+                self.optimizer.zero_grad(set_to_none=True)
+                return raw_loss, reward_margins.mean().item(), None
             self.scaler.step(self.optimizer)
             self.scaler.update()
             self.optimizer.zero_grad(set_to_none=True)
             
-        return loss.item(), reward_margins.mean().item(), grad_norm
+        return raw_loss, reward_margins.mean().item(), (grad_norm.item() if grad_norm is not None else None)
