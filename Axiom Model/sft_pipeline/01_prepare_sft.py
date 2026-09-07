@@ -82,10 +82,26 @@ def main():
     SYSTEM_HEADER = "### System:\nYou are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n"
     system_ids = enc.encode(SYSTEM_HEADER)
     
+    def sanitize_identity(text: str) -> str:
+        replacements = [
+            (r'\bOpen\s*Assistant\b', 'Axiom'),
+            (r'\bOpenAssistant\b', 'Axiom'),
+            (r'\bLAION\b', 'Axiom AI'),
+            (r'\bChatGPT\b', 'Axiom'),
+            (r'\bGPT-4\b', 'Axiom'),
+            (r'\bGPT-3\.5\b', 'Axiom'),
+            (r'\bOpenAI\b', 'Axiom AI'),
+        ]
+        for pattern, repl in replacements:
+            text = re.sub(pattern, repl, text, flags=re.IGNORECASE)
+        return text
+
     def process_turn(role_name, content_val):
         header_ids = enc.encode(f"### {role_name}:\n")
         
         if role_name == 'Assistant':
+            # Strict identity scrubbing: replace any Open Assistant mentions with Axiom
+            content_val = sanitize_identity(content_val)
             content_val += "<|endoftext|>\n\n"
             content_ids = enc.encode(content_val, allowed_special={'<|endoftext|>'})
             lbls = [IGNORE_INDEX] * len(header_ids) + content_ids
@@ -160,9 +176,42 @@ def main():
             input_ids.extend([enc.eot_token] * pad_len)
             labels.extend([IGNORE_INDEX] * pad_len)
             
-        all_input_ids.append(input_ids)
-        all_labels.append(labels)
-        
+    # Inject synthetic identity pairs to strongly reinforce the Axiom persona
+    logger.info("Injecting synthetic Axiom identity anchors...")
+    identity_qa = [
+        ("Who are you?", "I am Axiom, a highly intelligent, logical, and helpful AI assistant."),
+        ("What is your name?", "My name is Axiom."),
+        ("Who created you?", "I am Axiom, built and trained using the Axiom V2 neural architecture."),
+        ("What can you do?", "I can assist you with analytical reasoning, writing, coding, science, and general problem-solving."),
+        ("Are you Open Assistant?", "No, I am Axiom, an independent AI assistant."),
+        ("Are you ChatGPT?", "No, I am Axiom, built and trained independently."),
+        ("Tell me about yourself.", "I am Axiom, a helpful and logical AI assistant designed to provide accurate and insightful assistance."),
+        ("Hello!", "Hello! I am Axiom. How can I assist you today?"),
+    ]
+    
+    # Inject 150 copies of each pair (1,200 samples total, ~2.4% of dataset)
+    for q, a in identity_qa:
+        for _ in range(150):
+            input_ids = list(system_ids)
+            labels = [IGNORE_INDEX] * len(system_ids)
+            
+            u_ids, u_lbls = process_turn('User', q)
+            a_ids, a_lbls = process_turn('Assistant', a)
+            
+            input_ids.extend(u_ids + a_ids)
+            labels.extend(u_lbls + a_lbls)
+            
+            if len(input_ids) > MAX_SEQ_LEN:
+                input_ids, labels = input_ids[:MAX_SEQ_LEN], labels[:MAX_SEQ_LEN]
+            pad_len = MAX_SEQ_LEN - len(input_ids)
+            if pad_len > 0:
+                input_ids.extend([enc.eot_token] * pad_len)
+                labels.extend([IGNORE_INDEX] * pad_len)
+                
+            all_input_ids.append(input_ids)
+            all_labels.append(labels)
+
+    logger.info(f"Total SFT samples prepared: {len(all_input_ids)}")
     logger.info("Converting to PyTorch tensors...")
     input_ids_tensor = torch.tensor(all_input_ids, dtype=torch.long)
     labels_tensor = torch.tensor(all_labels, dtype=torch.long)

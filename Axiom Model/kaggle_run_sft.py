@@ -24,31 +24,57 @@ def check_and_clear_space():
 
 def run_training():
     print("[2/3] Configuring Training Environment...")
-    # Find base model
-    base_model = "../checkpoints/best.pt"
-    if not os.path.exists(base_model):
-        base_model = "best.pt" # Fallback if they copied it locally
+    # Robust search for base pretrained model
+    base_model = None
+    candidate_paths = [
+        "checkpoints/best.pt",
+        "../checkpoints/best.pt",
+        "/kaggle/working/Axiom-V2/checkpoints/best.pt",
+        "best.pt"
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p):
+            base_model = p
+            break
+            
+    if not base_model:
+        # Recursive search for any best.pt outside checkpoints_sft
+        for root, dirs, files in os.walk("/kaggle/working"):
+            if "best.pt" in files and "checkpoints_sft" not in root and "checkpoints_dpo" not in root:
+                base_model = os.path.join(root, "best.pt")
+                break
         
-    dataset_path = "sft_pipeline/dataset/sft/sft_data.pt"
+    dataset_path = "dataset/sft/sft_data.pt"
     if not os.path.exists(dataset_path):
-        dataset_path = "dataset/sft/sft_data.pt"
+        dataset_path = "sft_pipeline/dataset/sft/sft_data.pt"
         
+    # Check for pretrain replay dataset (10% Mixed Replay Anti-Forgetting)
+    replay_path = None
+    for root, dirs, files in os.walk("/kaggle/input"):
+        if "train.bin" in files:
+            replay_path = os.path.join(root, "train.bin")
+            break
+
     print(f"Using base model: {base_model}")
-    print(f"Using dataset: {dataset_path}")
+    print(f"Using dataset   : {dataset_path}")
+    if replay_path:
+        print(f"🌟 Anti-Forgetting 10% Mixed Replay ACTIVE: {replay_path}")
+    else:
+        print("ℹ️ Standard SFT mode (train.bin not found in /kaggle/input, running pure SFT)")
     
-    if not os.path.exists(base_model):
-        print(f"ERROR: Base model not found at {base_model}!")
-        print("Please ensure your pre-trained model is available.")
+    if not base_model or not os.path.exists(base_model):
+        print(f"ERROR: Base model not found! Checked: {candidate_paths}")
+        print("Please ensure your pre-trained model is available in checkpoints/best.pt.")
         return
         
     if not os.path.exists(dataset_path):
-        print(f"ERROR: Dataset not found at {dataset_path}!")
+        print(f"ERROR: SFT Dataset not found at {dataset_path}!")
+        print("Please run 'python sft_pipeline/01_prepare_sft.py' first.")
         return
 
     print("\n[3/3] Launching SFT Training Engine...")
     print("="*50)
     print("NOTE: We are using subprocess to bypass Kaggle's Jupyter buffering.")
-    print("If you see an OOM error, it will be printed below.")
     print("="*50 + "\n")
     
     # Find free port for torchrun to prevent EADDRINUSE
@@ -61,6 +87,8 @@ def run_training():
         "--data", dataset_path,
         "--save_dir", "checkpoints_sft"
     ]
+    if replay_path:
+        cmd.extend(["--replay_data", replay_path])
     
     # Run process unbuffered and stream directly to stdout
     process = subprocess.Popen(
