@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axiom V2 Chat</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #343541; color: #ececf1; display: flex; flex-direction: column; height: 100vh; }
+        .header { text-align: center; padding: 15px; background-color: #202123; border-bottom: 1px solid #4d4d4f; font-weight: bold; font-size: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .message-row { width: 100%; max-width: 800px; display: flex; margin-bottom: 20px; }
+        .message-row.user { justify-content: flex-end; }
+        .message { padding: 15px 20px; border-radius: 8px; max-width: 80%; line-height: 1.5; white-space: pre-wrap; font-size: 15px;}
+        .message.user { background-color: #10a37f; color: white; border-bottom-right-radius: 2px; }
+        .message.axiom { background-color: #444654; color: #d1d5db; border: 1px solid #565869; border-bottom-left-radius: 2px; }
+        .input-container { padding: 20px; background-color: #343541; display: flex; justify-content: center; border-top: 1px solid #4d4d4f; }
+        .input-box { display: flex; width: 100%; max-width: 800px; background-color: #40414f; border: 1px solid #565869; border-radius: 8px; padding: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        textarea { flex: 1; background: transparent; border: none; color: white; font-size: 16px; resize: none; outline: none; font-family: inherit; padding-top: 8px; }
+        button { background-color: #10a37f; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; margin-left: 10px; }
+        button:hover { background-color: #1a7f64; }
+        button:disabled { background-color: #565869; cursor: not-allowed; }
+        .speed { font-size: 11px; color: #8e8ea0; margin-top: 8px; font-style: italic; }
+        pre { background: #202123; padding: 12px; border-radius: 5px; overflow-x: auto; border: 1px solid #343541; }
+        code { font-family: 'Courier New', Courier, monospace; color: #e2e8f0; }
+        /* Simple spinner */
+        .loader { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #fff; animation: pulse 1.5s infinite; margin-right: 5px; }
+        @keyframes pulse { 0% { opacity: .2; } 50% { opacity: 1; } 100% { opacity: .2; } }
+    </style>
+</head>
+<body>
+    <div class="header">🧠 Axiom V2 Local Intelligence</div>
+    <div class="chat-container" id="chat">
+        <div class="message-row axiom">
+            <div class="message axiom">Hello! I am Axiom V2, running locally on your Mac's Apple Silicon GPU. How can I help you today?</div>
+        </div>
+    </div>
+    <div class="input-container">
+        <div class="input-box">
+            <textarea id="prompt" rows="1" placeholder="Ask Axiom a question..." oninput="this.style.height = '';this.style.height = this.scrollHeight + 'px'"></textarea>
+            <button id="sendBtn" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chat = document.getElementById('chat');
+        const promptEl = document.getElementById('prompt');
+        const sendBtn = document.getElementById('sendBtn');
+
+        // Simple markdown code block formatter
+        function formatText(text) {
+            // Encode html tags to prevent XSS and formatting issues
+            let formatted = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            
+            // Format code blocks
+            formatted = formatted.replace(/```(.*?)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+            
+            // Format inline code
+            formatted = formatted.replace(/`([^`]+)`/g, '<code style="background:#202123;padding:2px 4px;border-radius:3px;">$1</code>');
+            
+            return formatted;
+        }
+
+        async function sendMessage() {
+            const prompt = promptEl.value.trim();
+            if (!prompt) return;
+
+            // Add user message
+            chat.innerHTML += `<div class="message-row user"><div class="message user">${formatText(prompt)}</div></div>`;
+            promptEl.value = '';
+            promptEl.style.height = 'auto';
+            chat.scrollTop = chat.scrollHeight;
+
+            sendBtn.disabled = true;
+            
+            // Add loading message
+            const loadingId = 'loading-' + Date.now();
+            chat.innerHTML += `<div class="message-row axiom" id="${loadingId}">
+                <div class="message axiom">
+                    <span class="loader" style="animation-delay: 0s"></span>
+                    <span class="loader" style="animation-delay: 0.2s"></span>
+                    <span class="loader" style="animation-delay: 0.4s"></span>
+                </div>
+            </div>`;
+            chat.scrollTop = chat.scrollHeight;
+
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prompt: prompt, max_tokens: 250, temperature: 0.2})
+                });
+                const data = await res.json();
+                
+                document.getElementById(loadingId).remove();
+                
+                chat.innerHTML += `<div class="message-row axiom">
+                    <div>
+                        <div class="message axiom">${formatText(data.response)}</div>
+                        <div class="speed">⚡ Running on MPS at ${data.speed} tokens/sec</div>
+                    </div>
+                </div>`;
+            } catch (e) {
+                document.getElementById(loadingId).remove();
+                chat.innerHTML += `<div class="message-row axiom"><div class="message axiom" style="color:#ff6b6b;">Error connecting to local server. Make sure it's running!</div></div>`;
+            }
+            
+            sendBtn.disabled = false;
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        promptEl.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

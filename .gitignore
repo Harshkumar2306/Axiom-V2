@@ -25,9 +25,15 @@ checkpoints_sft/
 checkpoints_dpo/
 runs/
 *.pt
+!Axiom Model/best.pt
 *.pth
 *.bin
 
 # Web dependencies
 node_modules/
 dist/
+
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
