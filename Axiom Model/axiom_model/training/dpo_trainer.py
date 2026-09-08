@@ -57,35 +57,30 @@ class DPOTrainer:
         # Concatenate chosen and rejected to do a single forward pass
         # This completely avoids PyTorch's checkpointing inplace modification error with RoPE buffers
         combined_ids = torch.cat([chosen_ids, rejected_ids], dim=0)
+        combined_labels = torch.cat([chosen_labels, rejected_labels], dim=0)
         
         # Forward Reference Model (No gradients, saving VRAM)
         with torch.no_grad():
             with torch.amp.autocast('cuda'):
                 ref_combined_logits = self.ref_model(combined_ids)
-                
-                ref_chosen_logits = ref_combined_logits[:chosen_ids.size(0)]
-                ref_rejected_logits = ref_combined_logits[chosen_ids.size(0):]
-                
-                ref_chosen_logps = get_batch_logps(ref_chosen_logits, chosen_labels, average_log_prob=True)
-                ref_rejected_logps = get_batch_logps(ref_rejected_logits, rejected_labels, average_log_prob=True)
+                ref_logps = get_batch_logps(ref_combined_logits, combined_labels, average_log_prob=True)
+                ref_chosen_logps = ref_logps[:chosen_ids.size(0)]
+                ref_rejected_logps = ref_logps[chosen_ids.size(0):]
                 
         # >>> VRAM SAFETY: Aggressively free massive logit tensors before Policy forward pass <<<
-        del ref_combined_logits, ref_chosen_logits, ref_rejected_logits
+        del ref_combined_logits, ref_logps
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
         # Forward Policy Model (Active Training)
         with torch.amp.autocast('cuda'):
             policy_combined_logits = self.policy_model(combined_ids)
+            policy_logps = get_batch_logps(policy_combined_logits, combined_labels, average_log_prob=True)
+            policy_chosen_logps = policy_logps[:chosen_ids.size(0)]
+            policy_rejected_logps = policy_logps[chosen_ids.size(0):]
             
-            policy_chosen_logits = policy_combined_logits[:chosen_ids.size(0)]
-            policy_rejected_logits = policy_combined_logits[chosen_ids.size(0):]
-            
-            policy_chosen_logps = get_batch_logps(policy_chosen_logits, chosen_labels, average_log_prob=True)
-            policy_rejected_logps = get_batch_logps(policy_rejected_logits, rejected_labels, average_log_prob=True)
-            
-            # Immediately free policy logit tensors before loss computation
-            del policy_combined_logits, policy_chosen_logits, policy_rejected_logits
+            # Immediately free policy logit tensor before loss computation
+            del policy_combined_logits
             
             # Compute DPO Loss
             pi_logratios = policy_chosen_logps - policy_rejected_logps

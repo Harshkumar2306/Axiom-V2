@@ -1,4 +1,5 @@
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import sys
 import yaml
 import torch
@@ -79,7 +80,7 @@ def main():
     model_cfg = config['model']
     train_cfg = config.get('training', {})
 
-    def build_model():
+    def build_model(is_ref=False):
         return AxiomV2(
             vocab_size=model_cfg['vocab_size'],
             d_model=model_cfg['d_model'],
@@ -90,11 +91,11 @@ def main():
             multiple_of=model_cfg['multiple_of'],
             norm_eps=model_cfg['norm_eps'],
             rope_theta=model_cfg['rope_theta'],
-            gradient_checkpointing=train_cfg.get('gradient_checkpointing', True)
+            gradient_checkpointing=False if is_ref else train_cfg.get('gradient_checkpointing', True)
         ).to(device)
 
-    policy_model = build_model()
-    ref_model = build_model()
+    policy_model = build_model(is_ref=False)
+    ref_model = build_model(is_ref=True).half()
 
     # Load SFT Weights into both models
     pretrained_path = args.pretrained
@@ -103,6 +104,10 @@ def main():
         state = torch.load(pretrained_path, map_location='cpu', weights_only=False)
         policy_model.load_state_dict(state['model'])
         ref_model.load_state_dict(state['model'])
+        ref_model = ref_model.half() # Guarantee Reference Model stays in fp16 (saves 1GB VRAM)
+        ref_model.eval()
+        for param in ref_model.parameters():
+            param.requires_grad = False
         
         del state
         gc.collect()
@@ -231,8 +236,10 @@ def main():
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
                     logger.error(f"[OOM Safety] OOM caught on Rank {dist.get_rank() if is_distributed else 0}. Clearing cache.")
-                    if torch.cuda.is_available(): torch.cuda.empty_cache()
                     oom_flag[0] = 1
+                    del e
+                    gc.collect()
+                    if torch.cuda.is_available(): torch.cuda.empty_cache()
                 else:
                     raise e
 
