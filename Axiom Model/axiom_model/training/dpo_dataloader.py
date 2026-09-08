@@ -85,5 +85,4 @@ def create_dpo_dataloader(data_path: str, batch_size: int, is_distributed: bool,
         drop_last=is_train
     )
     
-    dataloader.dataset = dataset
     return dataloader, sampler
