@@ -8,18 +8,8 @@ import signal
 def check_and_clear_space():
     print("[1/3] Checking Kaggle Disk Space...")
     total, used, free = shutil.disk_usage("/")
+    # Check disk space cleanly without hardcoded deletions
     print(f"Total: {total // (2**30)} GB, Used: {used // (2**30)} GB, Free: {free // (2**30)} GB")
-    
-    # Automatically clean old SFT latest.pt optimizer states to reclaim 6GB of disk space
-    # (checkpoints_sft/best.pt is preserved and loaded as the base model)
-    sft_latest = "checkpoints_sft/latest.pt"
-    if os.path.exists(sft_latest):
-        print(f"Reclaiming ~6GB disk space from completed SFT optimizer states ({sft_latest})...")
-        try:
-            os.remove(sft_latest)
-            print("✓ Successfully freed 6GB disk space!")
-        except Exception as e:
-            print(f"Notice: {e}")
 
     # The limit is 19.52 GB on Kaggle. Let's remove old temporary files.
     checkpoints_dir = "checkpoints_dpo"
