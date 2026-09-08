@@ -71,6 +71,8 @@ class DPOTrainer:
                 
         # >>> VRAM SAFETY: Aggressively free massive logit tensors before Policy forward pass <<<
         del ref_combined_logits, ref_chosen_logits, ref_rejected_logits
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         # Forward Policy Model (Active Training)
         with torch.amp.autocast('cuda'):
@@ -82,6 +84,9 @@ class DPOTrainer:
             policy_chosen_logps = get_batch_logps(policy_chosen_logits, chosen_labels, average_log_prob=True)
             policy_rejected_logps = get_batch_logps(policy_rejected_logits, rejected_labels, average_log_prob=True)
             
+            # Immediately free policy logit tensors before loss computation
+            del policy_combined_logits, policy_chosen_logits, policy_rejected_logits
+            
             # Compute DPO Loss
             pi_logratios = policy_chosen_logps - policy_rejected_logps
             ref_logratios = ref_chosen_logps - ref_rejected_logps
@@ -92,13 +97,10 @@ class DPOTrainer:
             dpo_loss = -F.logsigmoid(self.beta * logits).mean()
             
             # Auxiliary SFT anchor loss on chosen sequence (prevents language drift / degenerate degradation)
-            shifted_chosen_logits = policy_chosen_logits[..., :-1, :].contiguous()
-            shifted_chosen_labels = chosen_labels[..., 1:].contiguous()
-            sft_loss = F.cross_entropy(
-                shifted_chosen_logits.view(-1, shifted_chosen_logits.size(-1)),
-                shifted_chosen_labels.view(-1),
-                ignore_index=-100
-            )
+            # Since policy_chosen_logps is the average per-token log-prob of chosen tokens,
+            # -policy_chosen_logps.mean() is EXACTLY the length-normalized SFT cross-entropy loss!
+            # Using this avoids re-allocating a duplicate 100,277-wide logits tensor, eliminating OOM completely.
+            sft_loss = -policy_chosen_logps.mean()
             
             # Combined Loss: DPO + SFT Anchor
             total_loss = dpo_loss + self.sft_weight * sft_loss

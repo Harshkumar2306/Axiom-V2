@@ -241,7 +241,8 @@ def main():
                 optimizer.zero_grad(set_to_none=True)
                 break
 
-        scheduler_mgr.step()
+        if oom_flag.item() == 0:
+            scheduler_mgr.step()
         current_step = opt_step + 1
 
         if is_rank_zero:
@@ -263,7 +264,7 @@ def main():
 
             # Save checkpoints every save_interval steps
             if current_step % save_interval == 0 or current_step == max_opt_steps:
-                is_best = avg_loss < best_loss
+                is_best = (avg_loss > 0.0) and (avg_loss < best_loss)
                 if is_best: best_loss = avg_loss
                 ckpt_mgr.save(policy_model, optimizer, scheduler_mgr, scaler, 0, current_step, best_loss, config, is_best=is_best)
 
