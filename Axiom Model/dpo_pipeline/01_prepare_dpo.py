@@ -72,8 +72,8 @@ def main():
         chosen_labels = [IGNORE_INDEX] * len(prompt_ids) + chosen_resp_ids
         rejected_labels = [IGNORE_INDEX] * len(prompt_ids) + rejected_resp_ids
         
-        # Skip if sequence is too long for 4096 context
-        if len(chosen_ids) > 4096 or len(rejected_ids) > 4096:
+        # Skip if sequence exceeds 1024 tokens to guarantee no truncation in collation
+        if len(chosen_ids) > 1024 or len(rejected_ids) > 1024:
             continue
             
         dpo_data.append({

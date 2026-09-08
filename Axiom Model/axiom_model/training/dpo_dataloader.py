@@ -21,8 +21,8 @@ def dpo_collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tens
     Dynamically pads the chosen and rejected sequences independently within the batch.
     This saves massive amounts of GPU memory compared to padding everything to 4096.
     """
-    # Kaggle T4 OOM Safety: Hard limit DPO sequences to 512 tokens.
-    MAX_DPO_SEQ_LEN = 512
+    # Kaggle T4 OOM Safety: Hard limit DPO sequences to 1024 tokens.
+    MAX_DPO_SEQ_LEN = 1024
     
     chosen_len = min(MAX_DPO_SEQ_LEN, max(len(item["chosen_ids"]) for item in batch))
     rejected_len = min(MAX_DPO_SEQ_LEN, max(len(item["rejected_ids"]) for item in batch))
@@ -85,4 +85,5 @@ def create_dpo_dataloader(data_path: str, batch_size: int, is_distributed: bool,
         drop_last=is_train
     )
     
+    dataloader.dataset = dataset
     return dataloader, sampler

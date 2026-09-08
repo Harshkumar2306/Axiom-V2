@@ -113,8 +113,8 @@ def main():
         policy_model = DDP(policy_model, device_ids=[local_rank])
 
     # 2. Build Optimizer & DPO Dataloaders
-    # DPO LR is usually very small (e.g., 5e-6)
-    dpo_lr = 5.0e-6
+    dpo_cfg = config.get('dpo', {})
+    dpo_lr = float(dpo_cfg.get('learning_rate', 5.0e-6))
     optimizer = torch.optim.AdamW(
         policy_model.parameters(),
         lr=dpo_lr,
@@ -122,16 +122,17 @@ def main():
         fused=(device.type == 'cuda')
     )
 
-    max_opt_steps = args.max_steps
+    max_opt_steps = args.max_steps if args.max_steps != 500 else dpo_cfg.get('max_steps', 120)
     scheduler_mgr = SchedulerManager(optimizer, {
         "type": "cosine",
         "T_max": max_opt_steps,
         "eta_min": 1e-7,
     })
 
+    batch_size = dpo_cfg.get('batch_size', 1)
     train_loader, _ = create_dpo_dataloader(
         args.data,
-        batch_size=train_cfg.get('batch_size', 2), # DPO uses 2x memory, reduce batch size
+        batch_size=batch_size,
         is_distributed=is_distributed,
         is_train=True
     )
@@ -139,10 +140,12 @@ def main():
     ckpt_mgr = CheckpointManager(save_dir=args.save_dir)
     scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
 
-    grad_accum = train_cfg.get('grad_accum_steps', 4)
-    log_interval = 5
+    grad_accum = dpo_cfg.get('grad_accum_steps', 16)
+    save_interval = dpo_cfg.get('save_interval', 20)
+    log_interval = dpo_cfg.get('log_interval', 1)
+    beta = args.beta if args.beta != 0.1 else float(dpo_cfg.get('beta', 0.1))
 
-    trainer = DPOTrainer(policy_model, ref_model, optimizer, scaler, beta=args.beta, grad_accum_steps=grad_accum)
+    trainer = DPOTrainer(policy_model, ref_model, optimizer, scaler, beta=beta, grad_accum_steps=grad_accum)
     train_logger = TrainingLogger(use_wandb=False, max_steps=max_opt_steps) if is_rank_zero else None
     profiler = Profiler()
 
@@ -154,8 +157,25 @@ def main():
     best_loss = loaded_best_loss if loaded_best_loss < float('inf') else float('inf')
 
     if is_rank_zero:
+        total_params = sum(p.numel() for p in policy_model.parameters()) / 1e6
+        num_samples = len(train_loader.dataset) if hasattr(train_loader, 'dataset') else "N/A"
+        banner = (
+            "\n" + "="*50 + "\n"
+            f"🚀 AXIOM V2 PHASE 5 DPO ENGINE IGNITED\n"
+            + "="*50 + "\n"
+            f"Policy Model : {total_params:.1f}M Parameters (Active)\n"
+            f"Ref Model    : {total_params:.1f}M Parameters (Frozen)\n"
+            f"Base SFT     : {args.pretrained}\n"
+            f"Preference DB: {args.data} ({num_samples} Pairs)\n"
+            f"Learning Rate: {dpo_lr:.2e} (Beta: {beta})\n"
+            f"Total Steps  : {max_opt_steps} Steps (Grad Accum: {grad_accum})\n"
+            f"GPUs         : {world_size}x GPUs (Batch: {batch_size})\n"
+            f"Save Interval: Every {save_interval} Steps\n"
+            f"Output Dir   : {args.save_dir}\n"
+            + "="*50 + "\n"
+        )
+        print(banner, flush=True)
         logger.info(f"Starting Phase 5 Direct Preference Optimization (DPO) from step {start_step}...")
-        logger.info(f"DPO config: lr={dpo_lr:.2e} | beta={args.beta} | max_steps={max_opt_steps} | grad_accum={grad_accum}")
 
     # Fast-forward dataloader iterator if resuming
     if start_step > 0:
@@ -239,13 +259,13 @@ def main():
                     profiler_stats=stats
                 )
 
-            # Save checkpoints every 100 steps
-            if current_step % 100 == 0 or current_step == max_opt_steps:
+            # Save checkpoints every save_interval steps
+            if current_step % save_interval == 0 or current_step == max_opt_steps:
                 is_best = avg_loss < best_loss
                 if is_best: best_loss = avg_loss
                 ckpt_mgr.save(policy_model, optimizer, scheduler_mgr, scaler, 0, current_step, best_loss, config, is_best=is_best)
 
-        if is_distributed and (current_step % 100 == 0 or current_step == max_opt_steps):
+        if is_distributed and (current_step % save_interval == 0 or current_step == max_opt_steps):
             dist.barrier()
 
         # Graceful Pause Exit
