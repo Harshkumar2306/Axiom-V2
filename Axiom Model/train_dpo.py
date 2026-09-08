@@ -263,8 +263,7 @@ def main():
         current_step = opt_step + 1
 
         if current_step % save_interval == 0 or current_step == max_opt_steps:
-            if hasattr(optimizer, 'consolidate_state_dict'):
-                optimizer.consolidate_state_dict(0)
+            pass
 
         if is_rank_zero:
             stats = profiler.end_step()
@@ -287,17 +286,15 @@ def main():
             if current_step % save_interval == 0 or current_step == max_opt_steps:
                 is_best = (avg_loss > 0.0) and (avg_loss < best_loss)
                 if is_best: best_loss = avg_loss
-                ckpt_mgr.save(policy_model, optimizer, scheduler_mgr, scaler, 0, current_step, best_loss, config, is_best=is_best)
+                ckpt_mgr.save(policy_model, None, None, None, 0, current_step, best_loss, config, is_best=is_best)
 
         if is_distributed and (current_step % save_interval == 0 or current_step == max_opt_steps):
             dist.barrier()
 
         # Graceful Pause Exit
         if pause_requested:
-            if hasattr(optimizer, 'consolidate_state_dict'):
-                optimizer.consolidate_state_dict(0)
             if is_rank_zero:
-                ckpt_mgr.save(policy_model, optimizer, scheduler_mgr, scaler, 0, current_step, best_loss, config, is_best=False)
+                ckpt_mgr.save(policy_model, None, None, None, 0, current_step, best_loss, config, is_best=False)
                 train_logger.close()
                 if os.path.exists("pause.flag"):
                     try: os.remove("pause.flag")

@@ -27,7 +27,7 @@ class CheckpointManager:
             
         state = {
             'model': model.module.state_dict() if hasattr(model, 'module') else model.state_dict(),
-            'optimizer': optimizer.state_dict(),
+            'optimizer': optimizer.state_dict() if optimizer else None,
             'scheduler': scheduler.state_dict() if scheduler else None,
             'scaler': scaler.state_dict() if scaler else None,
             'epoch': epoch,
