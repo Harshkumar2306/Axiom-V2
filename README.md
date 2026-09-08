@@ -300,15 +300,5 @@ Without a grounding signal, small models undergoing DPO can degenerate into repe
 Standard PyTorch buffers are saved inside `state_dict`. Registering RoPE frequencies (`freqs_cis`) as persistent creates device mismatch crashes when loading across CPU, CUDA, and Apple MPS.
 * **Fix:** Registered via `register_buffer(..., persistent=False)`, allowing dynamic on-device frequency computation.
 
----
 
-## 📜 License
-
-This project is licensed under the **MIT License** — feel free to use, modify, and build upon this architecture for research and applications.
-
----
-
-<div align="center">
-<b>Built with dedication by <a href="https://github.com/Harshkumar2306">Harsh Kumar</a></b><br>
-<i>Proving that foundational AI models can be engineered from scratch.</i>
 </div>
