@@ -8,10 +8,28 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+import re
+
+def sanitize_identity(text: str) -> str:
+    replacements = [
+        (r'\bOpen\s*Assistant\b', 'Axiom'),
+        (r'\bOpenAssistant\b', 'Axiom'),
+        (r'\bLAION\b', 'Axiom AI'),
+        (r'\bChatGPT\b', 'Axiom'),
+        (r'\bGPT-4\b', 'Axiom'),
+        (r'\bGPT-3\.5\b', 'Axiom'),
+        (r'\bOpenAI\b', 'Axiom AI'),
+    ]
+    for pattern, repl in replacements:
+        text = re.sub(pattern, repl, text, flags=re.IGNORECASE)
+    return text
+
 def create_markdown_dpo(question, answer):
     """
     Builds the exact Markdown prompt and response strings for DPO, matching Phase 4.
     """
+    question = sanitize_identity(question)
+    answer = sanitize_identity(answer)
     sys_str = "### System:\nYou are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n"
     prompt = f"{sys_str}### User:\n{question}\n\n### Assistant:\n"
     response = f"{answer}<|endoftext|>"
