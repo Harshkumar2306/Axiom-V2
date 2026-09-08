@@ -48,7 +48,7 @@ def main():
     dpo_data = []
     
     for item in tqdm(dataset, desc="Tokenizing DPO Pairs"):
-        question = item.get("question", "")
+        question = item.get("prompt", "") or item.get("question", "") or item.get("instruction", "")
         chosen = item.get("chosen", "")
         rejected = item.get("rejected", "")
         
