@@ -10,11 +10,21 @@ def check_and_clear_space():
     total, used, free = shutil.disk_usage("/")
     print(f"Total: {total // (2**30)} GB, Used: {used // (2**30)} GB, Free: {free // (2**30)} GB")
     
-    # We want to ensure we have enough space.
+    # Automatically clean old SFT latest.pt optimizer states to reclaim 6GB of disk space
+    # (checkpoints_sft/best.pt is preserved and loaded as the base model)
+    sft_latest = "checkpoints_sft/latest.pt"
+    if os.path.exists(sft_latest):
+        print(f"Reclaiming ~6GB disk space from completed SFT optimizer states ({sft_latest})...")
+        try:
+            os.remove(sft_latest)
+            print("✓ Successfully freed 6GB disk space!")
+        except Exception as e:
+            print(f"Notice: {e}")
+
     # The limit is 19.52 GB on Kaggle. Let's remove old temporary files.
     checkpoints_dir = "checkpoints_dpo"
     if os.path.exists(checkpoints_dir):
-        print(f"Clearing old checkpoints in {checkpoints_dir} to free up space...")
+        print(f"Clearing old temporary files in {checkpoints_dir} to free up space...")
         for f in os.listdir(checkpoints_dir):
             # Only delete failed .tmp files. Do NOT delete latest.pt or best.pt 
             # otherwise the training cannot resume!
