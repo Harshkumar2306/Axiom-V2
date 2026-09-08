@@ -121,12 +121,22 @@ def main():
     # 2. Build Optimizer & DPO Dataloaders
     dpo_cfg = config.get('dpo', {})
     dpo_lr = float(dpo_cfg.get('learning_rate', 5.0e-6))
-    optimizer = torch.optim.AdamW(
-        policy_model.parameters(),
-        lr=dpo_lr,
-        weight_decay=train_cfg.get('weight_decay', 0.1),
-        fused=(device.type == 'cuda')
-    )
+    if is_distributed:
+        from torch.distributed.optim import ZeroRedundancyOptimizer
+        optimizer = ZeroRedundancyOptimizer(
+            policy_model.parameters(),
+            optimizer_class=torch.optim.AdamW,
+            lr=dpo_lr,
+            weight_decay=train_cfg.get('weight_decay', 0.1),
+            fused=False # Disable fused to prevent 1.9GB flattened gradient buffer allocation
+        )
+    else:
+        optimizer = torch.optim.AdamW(
+            policy_model.parameters(),
+            lr=dpo_lr,
+            weight_decay=train_cfg.get('weight_decay', 0.1),
+            fused=False
+        )
 
     max_opt_steps = args.max_steps if args.max_steps is not None else dpo_cfg.get('max_steps', 45)
     scheduler_mgr = SchedulerManager(optimizer, {
@@ -252,6 +262,10 @@ def main():
             scheduler_mgr.step()
         current_step = opt_step + 1
 
+        if current_step % save_interval == 0 or current_step == max_opt_steps:
+            if hasattr(optimizer, 'consolidate_state_dict'):
+                optimizer.consolidate_state_dict(0)
+
         if is_rank_zero:
             stats = profiler.end_step()
             stats.update(profiler.get_gpu_memory())
@@ -280,6 +294,8 @@ def main():
 
         # Graceful Pause Exit
         if pause_requested:
+            if hasattr(optimizer, 'consolidate_state_dict'):
+                optimizer.consolidate_state_dict(0)
             if is_rank_zero:
                 ckpt_mgr.save(policy_model, optimizer, scheduler_mgr, scaler, 0, current_step, best_loss, config, is_best=False)
                 train_logger.close()
