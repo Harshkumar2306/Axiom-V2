@@ -18,7 +18,7 @@ def sample_top_p(probs, p):
     next_token = torch.gather(probs_idx, -1, next_token)
     return next_token
 
-def generate(model, enc, prompt, max_new_tokens, temperature=0.7, top_k=50, top_p=0.9, repetition_penalty=1.1, use_kv_cache=True, stream=True):
+def generate(model, enc, prompt, max_new_tokens, temperature=0.2, top_k=50, top_p=0.9, repetition_penalty=1.0, use_kv_cache=True, stream=True):
     device = next(model.parameters()).device
     tokens = enc.encode(prompt)
     prompt_len = len(tokens)
@@ -59,9 +59,9 @@ def generate(model, enc, prompt, max_new_tokens, temperature=0.7, top_k=50, top_
                     
             next_token_logits = logits[:, -1, :]
             
-            # Repetition Penalty
-            if repetition_penalty != 1.0:
-                for t in tokens[0]:
+            # Repetition Penalty (applied ONLY to generated tokens, NEVER prompt tokens!)
+            if repetition_penalty != 1.0 and generated_tokens:
+                for t in set(generated_tokens):
                     if next_token_logits[0, t] > 0:
                         next_token_logits[0, t] /= repetition_penalty
                     else:
@@ -196,10 +196,10 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", type=str, default="checkpoints/best.pt", help="Path to checkpoint")
     parser.add_argument("--prompt", type=str, default="### System:\nYou are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n### User:\nThe secret to artificial intelligence is\n\n### Assistant:\n", help="Generation prompt")
     parser.add_argument("--max_new_tokens", type=int, default=200, help="Number of tokens to generate")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Temperature for sampling")
+    parser.add_argument("--temperature", type=float, default=0.2, help="Temperature for sampling")
     parser.add_argument("--top_k", type=int, default=50, help="Top-K sampling cutoff")
     parser.add_argument("--top_p", type=float, default=0.9, help="Top-P nucleus sampling cutoff")
-    parser.add_argument("--repetition_penalty", type=float, default=1.1, help="Repetition penalty")
+    parser.add_argument("--repetition_penalty", type=float, default=1.0, help="Repetition penalty")
     parser.add_argument("--disable_kv_cache", action="store_true", help="Disable KV caching for debugging")
     parser.add_argument("--test", action="store_true", help="Run the Phase 2 Validation Suite")
     

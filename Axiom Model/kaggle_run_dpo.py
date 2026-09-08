@@ -5,22 +5,10 @@ import shutil
 import time
 import signal
 
-def check_and_clear_space():
+def check_disk_space():
     print("[1/3] Checking Kaggle Disk Space...")
     total, used, free = shutil.disk_usage("/")
-    # Check disk space cleanly without hardcoded deletions
     print(f"Total: {total // (2**30)} GB, Used: {used // (2**30)} GB, Free: {free // (2**30)} GB")
-
-    # The limit is 19.52 GB on Kaggle. Let's remove old temporary files.
-    checkpoints_dir = "checkpoints_dpo"
-    if os.path.exists(checkpoints_dir):
-        print(f"Clearing old temporary files in {checkpoints_dir} to free up space...")
-        for f in os.listdir(checkpoints_dir):
-            # Only delete failed .tmp files. Do NOT delete latest.pt or best.pt 
-            # otherwise the training cannot resume!
-            if ".tmp" in f:
-                os.remove(os.path.join(checkpoints_dir, f))
-                print(f"Deleted {f}")
 
 def run_training():
     print("[2/3] Configuring Training Environment...")
@@ -89,5 +77,5 @@ def run_training():
         print("\n[SUCCESS] DPO Training completed.")
 
 if __name__ == "__main__":
-    check_and_clear_space()
+    check_disk_space()
     run_training()

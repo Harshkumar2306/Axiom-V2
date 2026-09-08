@@ -51,8 +51,9 @@ def parse_args():
     parser.add_argument('--data', type=str, default='./dataset/dpo/dpo_data.pt', help='Path to dpo_data.pt')
     parser.add_argument('--pretrained', type=str, default='./checkpoints_sft/best.pt', help='Path to pretrained SFT checkpoint')
     parser.add_argument('--save_dir', type=str, default='./checkpoints_dpo', help='Checkpoint output directory')
-    parser.add_argument('--max_steps', type=int, default=500, help='Max optimization steps')
-    parser.add_argument('--beta', type=float, default=0.1, help='DPO Beta penalty coefficient')
+    parser.add_argument('--max_steps', type=int, default=None, help='Max optimization steps')
+    parser.add_argument('--beta', type=float, default=None, help='DPO Beta penalty coefficient')
+    parser.add_argument('--sft_weight', type=float, default=None, help='Auxiliary SFT anchor loss weight')
     return parser.parse_args()
 
 def main():
@@ -122,7 +123,7 @@ def main():
         fused=(device.type == 'cuda')
     )
 
-    max_opt_steps = args.max_steps if args.max_steps != 500 else dpo_cfg.get('max_steps', 120)
+    max_opt_steps = args.max_steps if args.max_steps is not None else dpo_cfg.get('max_steps', 45)
     scheduler_mgr = SchedulerManager(optimizer, {
         "type": "cosine",
         "T_max": max_opt_steps,
@@ -141,11 +142,12 @@ def main():
     scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
 
     grad_accum = dpo_cfg.get('grad_accum_steps', 16)
-    save_interval = dpo_cfg.get('save_interval', 20)
+    save_interval = dpo_cfg.get('save_interval', 15)
     log_interval = dpo_cfg.get('log_interval', 1)
-    beta = args.beta if args.beta != 0.1 else float(dpo_cfg.get('beta', 0.1))
+    beta = args.beta if args.beta is not None else float(dpo_cfg.get('beta', 0.2))
+    sft_weight = args.sft_weight if args.sft_weight is not None else float(dpo_cfg.get('sft_weight', 0.1))
 
-    trainer = DPOTrainer(policy_model, ref_model, optimizer, scaler, beta=beta, grad_accum_steps=grad_accum)
+    trainer = DPOTrainer(policy_model, ref_model, optimizer, scaler, beta=beta, sft_weight=sft_weight, grad_accum_steps=grad_accum)
     train_logger = TrainingLogger(use_wandb=False, max_steps=max_opt_steps) if is_rank_zero else None
     profiler = Profiler()
 
@@ -167,7 +169,7 @@ def main():
             f"Ref Model    : {total_params:.1f}M Parameters (Frozen)\n"
             f"Base SFT     : {args.pretrained}\n"
             f"Preference DB: {args.data} ({num_samples} Pairs)\n"
-            f"Learning Rate: {dpo_lr:.2e} (Beta: {beta})\n"
+            f"Learning Rate: {dpo_lr:.2e} (Beta: {beta}, SFT Weight: {sft_weight})\n"
             f"Total Steps  : {max_opt_steps} Steps (Grad Accum: {grad_accum})\n"
             f"GPUs         : {world_size}x GPUs (Batch: {batch_size})\n"
             f"Save Interval: Every {save_interval} Steps\n"

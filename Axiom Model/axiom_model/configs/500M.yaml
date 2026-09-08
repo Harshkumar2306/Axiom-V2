@@ -46,10 +46,11 @@ sft:
 dpo:
   data_path: "./dataset/dpo/dpo_data.pt"
   learning_rate: 5.0e-6   # Gentle LR to prevent policy drift / catastrophic forgetting
-  beta: 0.1               # Standard implicit reward scaling penalty
-  max_steps: 120          # 120 Steps (~3.5 epochs over ~1,200 preference pairs)
+  beta: 0.2               # Regularized implicit reward scaling penalty
+  sft_weight: 0.1         # Auxiliary cross-entropy anchor preserving language fluency
+  max_steps: 45           # 1 full epoch (~1,400 preference pairs at effective batch 32)
   batch_size: 1           # 1 pair per GPU for guaranteed T4 VRAM safety
   grad_accum_steps: 16    # Effective batch size = 32 pairs per optimizer step
-  save_interval: 20       # Checkpoints saved at step 20, 40, 60, 80, 100, 120
+  save_interval: 15       # Checkpoints saved at step 15, 30, 45
   log_interval: 1         # Real-time telemetry on every single step
 

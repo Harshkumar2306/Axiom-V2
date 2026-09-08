@@ -3,16 +3,17 @@ import torch.nn.functional as F
 from torch.cuda.amp import autocast
 from torch.nn.utils import clip_grad_norm_
 
-def get_batch_logps(logits: torch.Tensor, labels: torch.Tensor, average_log_prob: bool = False):
+def get_batch_logps(logits: torch.Tensor, labels: torch.Tensor, average_log_prob: bool = True):
     """
     Computes the log probabilities of the given labels under the given logits.
+    When average_log_prob=True (default), returns length-normalized log-probabilities,
+    preventing DPO length bias (which unfairly penalizes longer, detailed chosen responses).
     """
     # Shift so that tokens < n predict n
     shifted_logits = logits[..., :-1, :].contiguous()
     shifted_labels = labels[..., 1:].contiguous()
     
     # Calculate cross entropy (which is -log(p)) for each token
-    # We use reduction='none' so we can sum across the sequence
     loss = F.cross_entropy(
         shifted_logits.view(-1, shifted_logits.size(-1)),
         shifted_labels.view(-1),
@@ -26,21 +27,22 @@ def get_batch_logps(logits: torch.Tensor, labels: torch.Tensor, average_log_prob
     log_probs = -loss * loss_mask
     
     if average_log_prob:
-        return log_probs.sum(dim=-1) / loss_mask.sum(dim=-1)
+        return log_probs.sum(dim=-1) / loss_mask.sum(dim=-1).clamp(min=1)
     else:
         return log_probs.sum(dim=-1)
 
 class DPOTrainer:
     """
     Direct Preference Optimization (DPO) Math Engine.
-    Executes the implicit reward modeling loss function without needing an actual reward model.
+    Executes implicit reward modeling with length normalization and conservative SFT anchor loss.
     """
-    def __init__(self, policy_model, ref_model, optimizer, scaler, beta=0.1, grad_accum_steps=1, clip_grad=1.0):
+    def __init__(self, policy_model, ref_model, optimizer, scaler, beta=0.2, sft_weight=0.1, grad_accum_steps=1, clip_grad=1.0):
         self.policy_model = policy_model
         self.ref_model = ref_model
         self.optimizer = optimizer
         self.scaler = scaler
         self.beta = beta
+        self.sft_weight = sft_weight
         self.grad_accum_steps = grad_accum_steps
         self.clip_grad = clip_grad
         
@@ -64,8 +66,8 @@ class DPOTrainer:
                 ref_chosen_logits = ref_combined_logits[:chosen_ids.size(0)]
                 ref_rejected_logits = ref_combined_logits[chosen_ids.size(0):]
                 
-                ref_chosen_logps = get_batch_logps(ref_chosen_logits, chosen_labels)
-                ref_rejected_logps = get_batch_logps(ref_rejected_logits, rejected_labels)
+                ref_chosen_logps = get_batch_logps(ref_chosen_logits, chosen_labels, average_log_prob=True)
+                ref_rejected_logps = get_batch_logps(ref_rejected_logits, rejected_labels, average_log_prob=True)
                 
         # >>> VRAM SAFETY: Aggressively free massive logit tensors before Policy forward pass <<<
         del ref_combined_logits, ref_chosen_logits, ref_rejected_logits
@@ -77,8 +79,8 @@ class DPOTrainer:
             policy_chosen_logits = policy_combined_logits[:chosen_ids.size(0)]
             policy_rejected_logits = policy_combined_logits[chosen_ids.size(0):]
             
-            policy_chosen_logps = get_batch_logps(policy_chosen_logits, chosen_labels)
-            policy_rejected_logps = get_batch_logps(policy_rejected_logits, rejected_labels)
+            policy_chosen_logps = get_batch_logps(policy_chosen_logits, chosen_labels, average_log_prob=True)
+            policy_rejected_logps = get_batch_logps(policy_rejected_logits, rejected_labels, average_log_prob=True)
             
             # Compute DPO Loss
             pi_logratios = policy_chosen_logps - policy_rejected_logps
@@ -87,18 +89,30 @@ class DPOTrainer:
             logits = pi_logratios - ref_logratios
             
             # The magic DPO loss formula: -log(sigmoid(beta * logits))
-            loss = -F.logsigmoid(self.beta * logits).mean()
+            dpo_loss = -F.logsigmoid(self.beta * logits).mean()
+            
+            # Auxiliary SFT anchor loss on chosen sequence (prevents language drift / degenerate degradation)
+            shifted_chosen_logits = policy_chosen_logits[..., :-1, :].contiguous()
+            shifted_chosen_labels = chosen_labels[..., 1:].contiguous()
+            sft_loss = F.cross_entropy(
+                shifted_chosen_logits.view(-1, shifted_chosen_logits.size(-1)),
+                shifted_chosen_labels.view(-1),
+                ignore_index=-100
+            )
+            
+            # Combined Loss: DPO + SFT Anchor
+            total_loss = dpo_loss + self.sft_weight * sft_loss
             
             # Implicit Reward monitoring (Optional, good for logging)
             chosen_rewards = (self.beta * (policy_chosen_logps - ref_chosen_logps)).detach()
             rejected_rewards = (self.beta * (policy_rejected_logps - ref_rejected_logps)).detach()
             reward_margins = chosen_rewards - rejected_rewards
 
-            raw_loss = loss.item()
+            raw_loss = total_loss.item()
             # Mathematically scale loss by accumulation steps so accumulated gradients are normalized
-            loss = loss / self.grad_accum_steps
+            total_loss = total_loss / self.grad_accum_steps
 
-        self.scaler.scale(loss).backward()
+        self.scaler.scale(total_loss).backward()
         
         grad_norm = None
         if is_last_accum_step:
@@ -110,5 +124,4 @@ class DPOTrainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
             self.optimizer.zero_grad(set_to_none=True)
-            
         return raw_loss, reward_margins.mean().item(), (grad_norm.item() if grad_norm is not None else None)

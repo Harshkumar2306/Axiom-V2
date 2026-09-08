@@ -41,7 +41,7 @@ def load_dpo_model(ckpt_path, device):
     print(f"✅ Phase 5 DPO Brain loaded! (Step: {step}, Loss: {val_loss})")
     return model
 
-def ask_axiom(model, enc, user_query, device, max_new_tokens=250, temperature=0.2, top_p=0.9, rep_penalty=1.15):
+def ask_axiom(model, enc, user_query, device, max_new_tokens=250, temperature=0.2, top_p=0.9, rep_penalty=1.0):
     prompt = (
         "### System:\n"
         "You are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n"
@@ -76,9 +76,9 @@ def ask_axiom(model, enc, user_query, device, max_new_tokens=250, temperature=0.
                 
             next_logits = logits[:, -1, :]
             
-            # Repetition Penalty
-            if rep_penalty != 1.0:
-                for t in input_ids[0]:
+            # Repetition Penalty (applied ONLY to newly generated tokens, NEVER prompt tokens!)
+            if rep_penalty != 1.0 and generated:
+                for t in set(generated):
                     if next_logits[0, t] > 0:
                         next_logits[0, t] /= rep_penalty
                     else:
