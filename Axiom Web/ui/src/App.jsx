@@ -1,266 +1,332 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Zap, Code, Brain, Settings2, Plus, Mic } from 'lucide-react';
-import { marked } from 'marked';
-import { motion, AnimatePresence } from 'framer-motion';
-import ChatBubble from './ChatBubble';
-import './App.css';
+import React, { useState, useEffect, useRef } from 'react';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import ChatMessage from './components/ChatMessage';
+import ChatInput from './components/ChatInput';
+import EmptyState from './components/EmptyState';
+import SettingsModal from './components/SettingsModal';
+import { Zap } from 'lucide-react';
 
-function App() {
-  const [messages, setMessages] = useState([]);
+const DEFAULT_SETTINGS = {
+  temperature: 0.2,
+  maxTokens: 500,
+  systemPrompt: 'You are a highly intelligent, logical, and helpful AI assistant named Axiom.',
+  apiBaseUrl: 'http://localhost:8000'
+};
+
+export default function App() {
+  // Load conversations from localStorage
+  const [conversations, setConversations] = useState(() => {
+    try {
+      const saved = localStorage.getItem('axiom_conversations');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [activeId, setActiveId] = useState(() => {
+    try {
+      const saved = localStorage.getItem('axiom_active_chat');
+      return saved || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Settings
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('axiom_settings');
+      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  });
+
   const [input, setInput] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [thinkMode, setThinkMode] = useState(false);
-  const [temperature, setTemperature] = useState(0.7);
-  const [maxTokens, setMaxTokens] = useState(512);
-  
-  const chatContainerRef = useRef(null);
-  const textareaRef = useRef(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  const chatContainerRef = useRef(null);
+
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem('axiom_conversations', JSON.stringify(conversations));
+  }, [conversations]);
+
+  useEffect(() => {
+    if (activeId) {
+      localStorage.setItem('axiom_active_chat', activeId);
+    }
+  }, [activeId]);
+
+  useEffect(() => {
+    localStorage.setItem('axiom_settings', JSON.stringify(settings));
+  }, [settings]);
+
+  // Current conversation
+  const activeConversation = conversations.find((c) => c.id === activeId) || null;
+  const messages = activeConversation ? activeConversation.messages : [];
+
+  // Scroll to bottom
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isStreaming]);
+  }, [messages, isGenerating]);
 
-  // Health check ping
+  // Keyboard Shortcuts (Cmd+K for new chat, Cmd+, for settings)
   useEffect(() => {
-    const pingBackend = async () => {
-      try {
-        const res = await fetch('/api/health');
-        if (res.ok) setIsConnected(true);
-        else setIsConnected(false);
-      } catch (err) {
-        setIsConnected(false);
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        handleNewConversation();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsOpen(true);
+      }
+      if (e.key === 'Escape' && isSettingsOpen) {
+        setIsSettingsOpen(false);
       }
     };
-    pingBackend();
-    const interval = setInterval(pingBackend, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
-  const handleInput = (e) => {
-    setInput(e.target.value);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSettingsOpen]);
+
+  // Handlers
+  const handleNewConversation = () => {
+    const newId = 'chat_' + Date.now();
+    const newChat = {
+      id: newId,
+      title: 'New Conversation',
+      messages: [],
+      createdAt: new Date().toISOString()
+    };
+    setConversations((prev) => [newChat, ...prev]);
+    setActiveId(newId);
+    setInput('');
+  };
+
+  const handleDeleteConversation = (id) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (activeId === id) {
+      const remaining = conversations.filter((c) => c.id !== id);
+      setActiveId(remaining.length > 0 ? remaining[0].id : null);
     }
   };
 
-  const handleSend = async (textOverride) => {
-    const text = textOverride || input.trim();
-    if (!text || isStreaming || !isConnected) return;
+  const handleClearCurrentChat = () => {
+    if (!activeId) return;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === activeId ? { ...c, messages: [] } : c))
+    );
+  };
+
+  const handleExportChat = () => {
+    if (!messages || messages.length === 0) return;
+
+    let markdownContent = `# Axiom Chat Export\n*Generated on ${new Date().toLocaleString()}*\n\n---\n\n`;
+    messages.forEach((msg) => {
+      const author = msg.role === 'user' ? '### 👤 User' : '### 🤖 Axiom';
+      markdownContent += `${author}\n\n${msg.content}\n\n---\n\n`;
+    });
+
+    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `axiom_chat_${Date.now()}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSendPrompt = async (customPrompt) => {
+    const promptToSend = (customPrompt || input).trim();
+    if (!promptToSend || isGenerating) return;
+
+    let currentChatId = activeId;
+
+    // If no active chat, create one
+    if (!currentChatId) {
+      currentChatId = 'chat_' + Date.now();
+      const newChat = {
+        id: currentChatId,
+        title: promptToSend.slice(0, 36) + (promptToSend.length > 36 ? '...' : ''),
+        messages: [],
+        createdAt: new Date().toISOString()
+      };
+      setConversations((prev) => [newChat, ...prev]);
+      setActiveId(currentChatId);
+    }
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const userMessage = { role: 'user', content: promptToSend, timestamp };
+
+    // Append user message & update title if first message
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === currentChatId) {
+          const isFirstMessage = c.messages.length === 0;
+          return {
+            ...c,
+            title: isFirstMessage
+              ? promptToSend.slice(0, 36) + (promptToSend.length > 36 ? '...' : '')
+              : c.title,
+            messages: [...c.messages, userMessage]
+          };
+        }
+        return c;
+      })
+    );
 
     setInput('');
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    
-    // Add user message and empty axiom message
-    setMessages(prev => [
-      ...prev, 
-      { role: 'user', content: text },
-      { role: 'axiom', content: '' }
-    ]);
-    setIsStreaming(true);
+    setIsGenerating(true);
 
     try {
-      const response = await fetch('/api/chat', {
+      const endpoint = `${settings.apiBaseUrl.replace(/\/$/, '')}/chat`;
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, temperature: temperature, max_tokens: maxTokens })
+        body: JSON.stringify({
+          prompt: promptToSend,
+          max_tokens: settings.maxTokens,
+          temperature: settings.temperature
+        })
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.replace('data: ', '').trim();
-            if (!dataStr) continue;
-            try {
-              const data = JSON.parse(dataStr);
-              if (data.token) {
-                setMessages(prev => {
-                  const newMsgs = [...prev];
-                  const lastMsg = { ...newMsgs[newMsgs.length - 1] };
-                  lastMsg.content += data.token;
-                  
-                  // Clean up the stop token if it bleeds into the stream
-                  if (lastMsg.content.includes('<|endoftext|>')) {
-                      lastMsg.content = lastMsg.content.replace('<|endoftext|>', '');
-                  }
-                  
-                  newMsgs[newMsgs.length - 1] = lastMsg;
-                  return newMsgs;
-                });
-              }
-            } catch (err) {}
-          }
-        }
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP status ${res.status}`);
       }
+
+      const data = await res.json();
+      const assistantMessage = {
+        role: 'axiom',
+        content: data.response,
+        speed: data.speed,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentChatId
+            ? { ...c, messages: [...c.messages, assistantMessage] }
+            : c
+        )
+      );
     } catch (err) {
-      console.error(err);
-      setMessages(prev => {
-        const newMsgs = [...prev];
-        newMsgs[newMsgs.length - 1].content += '\n\n*Error connecting to backend.*';
-        return newMsgs;
-      });
+      const errorMessage = {
+        role: 'axiom',
+        content: `⚠️ **Connection Notice:** Unable to reach the backend at \`${settings.apiBaseUrl}\`.\n\nPlease verify that the Python server is running (\`python3 app.py\`) or adjust the API Base URL in **Model Parameters** (\`Cmd+,\`).`,
+        speed: 0,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentChatId
+            ? { ...c, messages: [...c.messages, errorMessage] }
+            : c
+        )
+      );
     } finally {
-      setIsStreaming(false);
+      setIsGenerating(false);
     }
   };
 
   return (
-    <div className="app-container">
-      <header className="header">
-        <div className="logo">
-          <Brain size={28} color={isConnected ? '#7b87ff' : '#f87171'} />
-          <h1>Axiom</h1>
-        </div>
-        <p className={`status ${isConnected ? '' : 'disconnected'}`}>
-          {isConnected ? '● Brain Connected' : '○ Brain Disconnected'}
-        </p>
-      </header>
+    <div className="flex h-screen w-screen bg-dark-950 text-slate-100 overflow-hidden select-text font-sans">
+      
+      {/* Sidebar */}
+      <Sidebar
+        conversations={conversations}
+        activeId={activeId}
+        onSelectConversation={(id) => setActiveId(id)}
+        onNewConversation={handleNewConversation}
+        onDeleteConversation={handleDeleteConversation}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        temperature={settings.temperature}
+      />
 
-      <main className="chat-container" ref={chatContainerRef}>
-        <AnimatePresence mode="wait">
-          {messages.length === 0 ? (
-            <motion.div 
-              key="empty-state"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9, y: -20 }}
-              transition={{ duration: 0.4, type: 'spring' }}
-              className="empty-state"
-            >
-              <div className="empty-logo-orb">
-                <Brain size={48} color={isConnected ? '#7b87ff' : '#6a7180'} />
-              </div>
-              <h2>How can I assist you today?</h2>
-              
-              <div className="suggestions-grid">
-                <button className="suggestion-card" onClick={() => handleSend("Tell me about your neural architecture. How many parameters do you have?")}>
-                  <Brain size={20} className="icon text-blue" />
-                  <p>Model Architecture</p>
-                  <span>Ask about my 476M parameters & structure.</span>
-                </button>
-                <button className="suggestion-card" onClick={() => handleSend("Explain your training pipeline. How were you aligned using DPO?")}>
-                  <Zap size={20} className="icon text-yellow" />
-                  <p>Training Pipeline</p>
-                  <span>Learn about Pretraining, SFT, and DPO.</span>
-                </button>
-                <button className="suggestion-card" onClick={() => handleSend("Demonstrate your reasoning capabilities by solving a complex logic puzzle.")}>
-                  <Code size={20} className="icon text-green" />
-                  <p>Test Reasoning</p>
-                  <span>Challenge my logic and coding abilities.</span>
-                </button>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div 
-              key="chat-box"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="chat-box"
-            >
-              {messages.map((msg, idx) => (
-                <ChatBubble 
-                  key={idx} 
-                  role={msg.role} 
-                  content={msg.content} 
-                  isStreaming={isStreaming && idx === messages.length - 1 && msg.role === 'axiom'} 
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
-
-      <footer className="input-container">
-        <AnimatePresence>
-          {showSettings && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="settings-panel"
-            >
-              <div className="setting-item">
-                <div className="setting-header">
-                  <label>Temperature</label>
-                  <span>{temperature}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="0" max="1" step="0.1" 
-                  value={temperature} 
-                  onChange={(e) => setTemperature(parseFloat(e.target.value))} 
-                />
-              </div>
-              <div className="setting-item">
-                <div className="setting-header">
-                  <label>Max Tokens</label>
-                  <span>{maxTokens}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="32" max="2048" step="32" 
-                  value={maxTokens} 
-                  onChange={(e) => setMaxTokens(parseInt(e.target.value))} 
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* Main App Canvas */}
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-dark-950 relative">
         
-        <div className="input-box">
-          <textarea 
-            ref={textareaRef}
-            value={input}
-            onChange={handleInput}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder={isConnected ? "Message Axiom..." : "Brain is disconnected..."}
-            rows="1" 
-            autoFocus
-          />
+        {/* Header Bar */}
+        <Header
+          onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onClearChat={handleClearCurrentChat}
+          onExportChat={handleExportChat}
+          hasMessages={messages.length > 0}
+          temperature={settings.temperature}
+        />
 
-          <div className="input-right-actions">
-            <button 
-              className={`think-btn ${showSettings ? 'active' : ''}`}
-              onClick={() => setShowSettings(!showSettings)}
-              title="Adjust generation parameters"
-            >
-              <Settings2 size={16} />
-              <span>Settings</span>
-            </button>
-            <button 
-              className="send-btn" 
-              onClick={handleSend}
-              disabled={!input.trim() || isStreaming || !isConnected}
-            >
-              <Send size={18} />
-            </button>
-          </div>
+        {/* Chat Scroll Container */}
+        <div
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
+        >
+          {messages.length === 0 ? (
+            <EmptyState onSelectPrompt={(p) => handleSendPrompt(p)} />
+          ) : (
+            <div className="flex-1 pb-6 pt-4 space-y-1">
+              {messages.map((msg, idx) => (
+                <ChatMessage key={idx} message={msg} />
+              ))}
+
+              {/* Generating Loader */}
+              {isGenerating && (
+                <div className="w-full max-w-4xl mx-auto px-4 py-5 flex gap-4 sm:gap-5 items-start">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-brand-500/15 border border-white/10 mt-1 animate-pulse">
+                    <Zap className="w-4 h-4 text-white fill-white/20" />
+                  </div>
+                  <div className="flex flex-col gap-2 mt-2">
+                    <div className="text-xs text-slate-400 font-medium">Axiom</div>
+                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-dark-850 border border-dark-750 text-xs text-slate-400">
+                      <div className="typing-loader">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <span className="font-mono text-[11px]">Generating next tokens...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </footer>
+
+        {/* Floating Input Bar */}
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          onSend={() => handleSendPrompt()}
+          isGenerating={isGenerating}
+          temperature={settings.temperature}
+        />
+      </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onSaveSettings={(newSettings) => setSettings(newSettings)}
+        onResetSettings={() => setSettings(DEFAULT_SETTINGS)}
+      />
     </div>
   );
 }
-
-export default App;
