@@ -8,7 +8,7 @@ import SettingsModal from './components/SettingsModal';
 
 const DEFAULT_SETTINGS = {
   temperature: 0.2,
-  maxTokens: 500,
+  maxTokens: 512,
   systemPrompt: 'You are a highly intelligent, logical, and helpful AI assistant named Axiom.',
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 };
