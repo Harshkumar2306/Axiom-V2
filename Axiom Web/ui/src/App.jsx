@@ -42,6 +42,7 @@ export default function App() {
   });
 
   const [input, setInput] = useState('');
+  const [isWebSearch, setIsWebSearch] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -194,7 +195,8 @@ export default function App() {
           prompt: promptToSend,
           max_tokens: settings.maxTokens,
           temperature: settings.temperature,
-          system_prompt: settings.systemPrompt
+          system_prompt: settings.systemPrompt,
+          web_search: isWebSearch
         })
       });
 
@@ -333,6 +335,8 @@ export default function App() {
           onSend={() => handleSendPrompt()}
           isGenerating={isGenerating}
           temperature={settings.temperature}
+          isWebSearch={isWebSearch}
+          setIsWebSearch={setIsWebSearch}
         />
       </div>
 

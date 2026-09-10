@@ -1,12 +1,14 @@
 import React, { useRef, useEffect } from 'react';
-import { ArrowUp, X, StopCircle } from 'lucide-react';
+import { ArrowUp, X, StopCircle, Globe } from 'lucide-react';
 
 export default function ChatInput({
   input,
   setInput,
   onSend,
   isGenerating,
-  temperature
+  temperature,
+  isWebSearch,
+  setIsWebSearch
 }) {
   const textareaRef = useRef(null);
 
@@ -51,6 +53,18 @@ export default function ChatInput({
             <span className="text-[11px] font-mono text-slate-400 bg-dark-800/80 px-2 py-0.5 rounded-md border border-dark-700/50">
               Temp: {temperature.toFixed(2)}
             </span>
+            <button
+              onClick={() => setIsWebSearch(!isWebSearch)}
+              title="Search the Web"
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium transition-colors border ${
+                isWebSearch 
+                  ? 'bg-cyber-cyan/10 text-cyber-cyan border-cyber-cyan/30' 
+                  : 'bg-dark-800/80 text-slate-400 border-dark-700/50 hover:bg-dark-750 hover:text-slate-300'
+              }`}
+            >
+              <Globe className="w-3 h-3" />
+              <span>Web Search</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-1.5">
