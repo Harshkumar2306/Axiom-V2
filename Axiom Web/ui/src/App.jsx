@@ -5,7 +5,6 @@ import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import EmptyState from './components/EmptyState';
 import SettingsModal from './components/SettingsModal';
-import { Zap } from 'lucide-react';
 
 const DEFAULT_SETTINGS = {
   temperature: 0.2,
@@ -15,7 +14,6 @@ const DEFAULT_SETTINGS = {
 };
 
 export default function App() {
-  // Load conversations from localStorage
   const [conversations, setConversations] = useState(() => {
     try {
       const saved = localStorage.getItem('axiom_conversations');
@@ -34,7 +32,6 @@ export default function App() {
     }
   });
 
-  // Settings
   const [settings, setSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('axiom_settings');
@@ -51,7 +48,6 @@ export default function App() {
 
   const chatContainerRef = useRef(null);
 
-  // Sync to localStorage
   useEffect(() => {
     localStorage.setItem('axiom_conversations', JSON.stringify(conversations));
   }, [conversations]);
@@ -66,11 +62,9 @@ export default function App() {
     localStorage.setItem('axiom_settings', JSON.stringify(settings));
   }, [settings]);
 
-  // Current conversation
   const activeConversation = conversations.find((c) => c.id === activeId) || null;
   const messages = activeConversation ? activeConversation.messages : [];
 
-  // Scroll to bottom
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTo({
@@ -84,7 +78,6 @@ export default function App() {
     scrollToBottom();
   }, [messages, isGenerating]);
 
-  // Keyboard Shortcuts (Cmd+K for new chat, Cmd+, for settings)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -99,12 +92,10 @@ export default function App() {
         setIsSettingsOpen(false);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSettingsOpen]);
 
-  // Handlers
   const handleNewConversation = () => {
     const newId = 'chat_' + Date.now();
     const newChat = {
@@ -156,8 +147,6 @@ export default function App() {
     if (!promptToSend || isGenerating) return;
 
     let currentChatId = activeId;
-
-    // If no active chat, create one
     if (!currentChatId) {
       currentChatId = 'chat_' + Date.now();
       const newChat = {
@@ -173,7 +162,6 @@ export default function App() {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMessage = { role: 'user', content: promptToSend, timestamp };
 
-    // Append user message & update title if first message
     setConversations((prev) =>
       prev.map((c) => {
         if (c.id === currentChatId) {
@@ -195,9 +183,13 @@ export default function App() {
 
     try {
       const endpoint = `${settings.apiBaseUrl.replace(/\/$/, '')}/chat`;
+      const abortController = new AbortController();
+      window.currentAbortController = abortController;
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortController.signal,
         body: JSON.stringify({
           prompt: promptToSend,
           max_tokens: settings.maxTokens,
@@ -210,45 +202,94 @@ export default function App() {
         throw new Error(`Server returned HTTP status ${res.status}`);
       }
 
-      const data = await res.json();
-      const assistantMessage = {
-        role: 'axiom',
-        content: data.response,
-        speed: data.speed,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let streamedResponse = '';
+      let finalSpeed = '0.00';
+
+      const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       setConversations((prev) =>
         prev.map((c) =>
           c.id === currentChatId
-            ? { ...c, messages: [...c.messages, assistantMessage] }
+            ? { ...c, messages: [...c.messages, { role: 'axiom', content: '', speed: null, timestamp: timestampStr }] }
             : c
         )
       );
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            
+            if (data.startsWith('__AXIOM_SPEED_')) {
+              finalSpeed = data.replace('__AXIOM_SPEED_', '').replace('__', '');
+              continue;
+            }
+            
+            streamedResponse += data;
+            
+            setConversations((prev) =>
+              prev.map((c) => {
+                if (c.id === currentChatId) {
+                  const updatedMsgs = [...c.messages];
+                  updatedMsgs[updatedMsgs.length - 1] = {
+                    ...updatedMsgs[updatedMsgs.length - 1],
+                    content: streamedResponse.replace(/<\|endoftext\|>/g, '')
+                  };
+                  return { ...c, messages: updatedMsgs };
+                }
+                return c;
+              })
+            );
+          }
+        }
+      }
+      
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id === currentChatId) {
+            const updatedMsgs = [...c.messages];
+            updatedMsgs[updatedMsgs.length - 1].speed = finalSpeed;
+            return { ...c, messages: updatedMsgs };
+          }
+          return c;
+        })
+      );
+
     } catch (err) {
-      const errorMessage = {
-        role: 'axiom',
-        content: `⚠️ **Connection Notice:** Unable to reach the backend at \`${settings.apiBaseUrl}\`.\n\nPlease verify that the Python server is running (\`python3 app.py\`) or adjust the API Base URL in **Model Parameters** (\`Cmd+,\`).`,
-        speed: 0,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === currentChatId
-            ? { ...c, messages: [...c.messages, errorMessage] }
-            : c
-        )
-      );
+      if (err.name === 'AbortError') {
+         console.log("Generation stopped by user.");
+      } else {
+        const errorMessage = {
+          role: 'axiom',
+          content: `⚠️ **Connection Notice:** Unable to reach the backend at \`${settings.apiBaseUrl}\`.\n\nPlease verify that the Python server is running (\`python3 app.py\`) or adjust the API Base URL in **Model Parameters** (\`Cmd+,\`).`,
+          speed: 0,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === currentChatId
+              ? { ...c, messages: [...c.messages, errorMessage] }
+              : c
+          )
+        );
+      }
     } finally {
       setIsGenerating(false);
+      window.currentAbortController = null;
     }
   };
 
   return (
     <div className="flex h-screen w-screen bg-dark-950 text-slate-100 overflow-hidden select-text font-sans">
-      
-      {/* Sidebar */}
       <Sidebar
         conversations={conversations}
         activeId={activeId}
@@ -261,10 +302,7 @@ export default function App() {
         temperature={settings.temperature}
       />
 
-      {/* Main App Canvas */}
       <div className="flex-1 flex flex-col h-full min-w-0 bg-dark-950 relative">
-        
-        {/* Header Bar */}
         <Header
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -274,7 +312,6 @@ export default function App() {
           temperature={settings.temperature}
         />
 
-        {/* Chat Scroll Container */}
         <div
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
@@ -286,31 +323,10 @@ export default function App() {
               {messages.map((msg, idx) => (
                 <ChatMessage key={idx} message={msg} />
               ))}
-
-              {/* Generating Loader */}
-              {isGenerating && (
-                <div className="w-full max-w-4xl mx-auto px-4 py-5 flex gap-4 sm:gap-5 items-start">
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-brand-500/15 border border-white/10 mt-1 animate-pulse">
-                    <Zap className="w-4 h-4 text-white fill-white/20" />
-                  </div>
-                  <div className="flex flex-col gap-2 mt-2">
-                    <div className="text-xs text-slate-400 font-medium">Axiom</div>
-                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-dark-850 border border-dark-750 text-xs text-slate-400">
-                      <div className="typing-loader">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                      </div>
-                      <span className="font-mono text-[11px]">Generating next tokens...</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
 
-        {/* Floating Input Bar */}
         <ChatInput
           input={input}
           setInput={setInput}
@@ -320,7 +336,6 @@ export default function App() {
         />
       </div>
 
-      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

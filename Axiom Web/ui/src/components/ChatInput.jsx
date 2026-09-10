@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { ArrowUp, X, Sparkles, StopCircle, CornerDownLeft } from 'lucide-react';
+import { ArrowUp, X, StopCircle } from 'lucide-react';
 
 export default function ChatInput({
   input,
@@ -26,11 +26,16 @@ export default function ChatInput({
     }
   };
 
+  const handleStop = () => {
+    if (window.currentAbortController) {
+      window.currentAbortController.abort();
+    }
+  };
+
   return (
     <div className="w-full max-w-3xl mx-auto px-4 pb-4 sm:pb-6">
       <div className="relative rounded-2xl bg-dark-900 border border-dark-750/90 shadow-2xl focus-within:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/15 transition-all duration-200">
         
-        {/* Input Textarea */}
         <textarea
           ref={textareaRef}
           value={input}
@@ -38,11 +43,9 @@ export default function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder="Message Axiom... (Enter to send, Shift+Enter for new line)"
           rows={1}
-          disabled={isGenerating}
           className="w-full bg-transparent border-none focus:outline-none focus:ring-0 text-slate-100 placeholder-slate-500 resize-none px-4 pt-3.5 pb-12 text-sm sm:text-base leading-relaxed max-h-48"
         />
 
-        {/* Bottom Toolbar inside the Dock */}
         <div className="absolute left-3 right-3 bottom-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-mono text-slate-400 bg-dark-800/80 px-2 py-0.5 rounded-md border border-dark-700/50">
@@ -51,7 +54,7 @@ export default function ChatInput({
           </div>
 
           <div className="flex items-center gap-1.5">
-            {input.trim() && (
+            {input.trim() && !isGenerating && (
               <button
                 onClick={() => setInput('')}
                 title="Clear input"
@@ -61,21 +64,27 @@ export default function ChatInput({
               </button>
             )}
 
-            <button
-              onClick={onSend}
-              disabled={!input.trim() || isGenerating}
-              className={`flex items-center justify-center w-8 h-8 rounded-xl transition-all ${
-                input.trim() && !isGenerating
-                  ? 'bg-white text-black hover:bg-slate-200 shadow-md scale-100'
-                  : 'bg-dark-800 text-slate-600 cursor-not-allowed scale-95'
-              }`}
-            >
-              {isGenerating ? (
-                <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-              ) : (
+            {isGenerating ? (
+              <button
+                onClick={handleStop}
+                title="Stop generating"
+                className="flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors"
+              >
+                <StopCircle className="w-5 h-5" />
+              </button>
+            ) : (
+              <button
+                onClick={onSend}
+                disabled={!input.trim()}
+                className={`flex items-center justify-center w-8 h-8 rounded-xl transition-all ${
+                  input.trim()
+                    ? 'bg-white text-black hover:bg-slate-200 shadow-md scale-100'
+                    : 'bg-dark-800 text-slate-600 cursor-not-allowed scale-95'
+                }`}
+              >
                 <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-              )}
-            </button>
+              </button>
+            )}
           </div>
         </div>
       </div>
