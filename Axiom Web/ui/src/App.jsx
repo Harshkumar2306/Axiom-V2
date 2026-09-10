@@ -279,7 +279,7 @@ export default function App() {
           className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
         >
           {messages.length === 0 ? (
-            <EmptyState onSelectPrompt={(p) => handleSendPrompt(p)} />
+            <EmptyState />
           ) : (
             <div className="flex-1 pb-6 pt-4 space-y-1">
               {messages.map((msg, idx) => (
