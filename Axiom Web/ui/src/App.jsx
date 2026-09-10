@@ -7,9 +7,9 @@ import EmptyState from './components/EmptyState';
 import SettingsModal from './components/SettingsModal';
 
 const DEFAULT_SETTINGS = {
-  temperature: 0.2,
+  temperature: 0.65,
   maxTokens: 512,
-  systemPrompt: 'You are a highly intelligent, logical, and helpful AI assistant named Axiom.',
+  systemPrompt: 'You are Axiom, an intelligent, factual, and helpful AI assistant. Provide clear, accurate, and direct answers.',
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 };
 

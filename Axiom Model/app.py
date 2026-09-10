@@ -64,9 +64,9 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     prompt: str
     max_tokens: int = 512
-    temperature: float = 0.2
+    temperature: float = 0.65
     system_prompt: Optional[str] = None
-    repetition_penalty: float = 1.05
+    repetition_penalty: float = 1.15
     web_search: bool = False
     rag_search: bool = True
 
@@ -76,7 +76,7 @@ async def chat_endpoint(request: ChatRequest):
         return {"response": "Model is not loaded. Please check server logs.", "speed": "0.0"}
         
     print(f"📩 Chat request: max_tokens={request.max_tokens}, temperature={request.temperature}, web_search={request.web_search}")
-    base_sys = request.system_prompt or "You are a highly intelligent, logical, and helpful AI assistant named Axiom."
+    base_sys = request.system_prompt or "You are Axiom, an intelligent, factual, and helpful AI assistant. Provide clear, accurate, and direct answers."
     
     collected_sources: List[Dict[str, Any]] = []
     context_sections: List[str] = []
@@ -126,13 +126,8 @@ async def chat_endpoint(request: ChatRequest):
         base_sys += "\n\nReference Information:\n" + "\n".join(context_sections)
         base_sys += "\n\nInstruction: Answer the user's question clearly and completely in full sentences based on the reference information above."
 
-    # Universal Structural Formatting Injection for Small Models
-    formatting_rule = " Format your response clearly. Use markdown code blocks for code, standard structural formatting for letters/emails (greetings, line breaks, sign-offs), and clear headings or bullet points for lists and essays."
-    if "format" not in base_sys.lower():
-        base_sys += formatting_rule
-
     formatted_prompt = f"### System:\n{base_sys}\n\n### User:\n{request.prompt}\n\n### Assistant:\n"
-    rep_penalty = request.repetition_penalty if request.repetition_penalty is not None else 1.05
+    rep_penalty = request.repetition_penalty if request.repetition_penalty is not None else 1.15
 
     def token_generator():
         generator = generate_stream_generator(
