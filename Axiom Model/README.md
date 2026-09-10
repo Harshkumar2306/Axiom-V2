@@ -5,13 +5,13 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
 [![Model Size](https://img.shields.io/badge/Parameters-476M-007ACC.svg?style=for-the-badge&logo=target)](https://github.com/Harshkumar2306/Axiom-V2)
 [![Tokens](https://img.shields.io/badge/Pretraining-4.5B%20Tokens-44CC11.svg?style=for-the-badge&logo=databricks)](https://github.com/Harshkumar2306/Axiom-V2)
-[![Alignment](https://img.shields.io/badge/Alignment-SFT%20%2B%20DPO-FF69B4.svg?style=for-the-badge&logo=sparkles)](https://github.com/Harshkumar2306/Axiom-V2)
+[![Alignment](https://img.shields.io/badge/Alignment-SFT-FF69B4.svg?style=for-the-badge&logo=sparkles)](https://github.com/Harshkumar2306/Axiom-V2)
 [![Acceleration](https://img.shields.io/badge/Inference-MPS%20%2F%20CUDA-8A2BE2.svg?style=for-the-badge&logo=apple)](https://github.com/Harshkumar2306/Axiom-V2)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
-**A 476M Parameter Large Language Model, Distributed Pretraining Engine, and Alignment Pipeline built entirely from scratch in PyTorch.**
+**A 476M Parameter Large Language Model, Distributed Pretraining Engine, and SFT Pipeline built entirely from scratch in PyTorch.**
 
-[Key Highlights](#-key-highlights) • [Architecture](#-architecture-specifications) • [The 5-Phase Pipeline](#-the-5-phase-engineering-lifecycle) • [Quick Start](#-quick-start) • [Local Web App](#-local-web-chat-app) • [Repository Map](#-repository-structure)
+[Key Highlights](#-key-highlights) • [Architecture](#-architecture-specifications) • [The 4-Phase Pipeline](#-the-4-phase-engineering-lifecycle) • [Quick Start](#-quick-start) • [Local Web App](#-local-web-chat-app) • [Repository Map](#-repository-structure)
 
 </div>
 
@@ -22,11 +22,9 @@
 * **100% From-Scratch Neural Architecture:** Built without relying on HuggingFace Transformers wrapper abstractions. Custom implemented RoPE, Grouped-Query Attention (GQA), SwiGLU, RMSNorm, and KV-cache inference.
 * **4.5 Billion Token Pretraining:** Trained on dual NVIDIA T4 GPUs in a strict distributed setting with a high-density curated corpus (FineWeb-Edu, code repositories, arXiv scientific texts, and encyclopedic knowledge).
 * **Fault-Tolerant Distributed Engine:** Custom `DistributedDataParallel` harness featuring `numpy.memmap` streaming, `model.no_sync()` gradient accumulation (96% communication reduction), and zero-loss `pause.flag` checkpointing for preemptible cloud nodes.
-* **Two-Stage Post-Training (SFT + DPO):**
-  * **Supervised Fine-Tuning (SFT):** Instruction formatting and task grounding with cosine warmup schedules.
-  * **Direct Preference Optimization (DPO):** Aligns generation preference using PyTorch `ZeroRedundancyOptimizer` (ZeRO-1) to shard optimizer states, combined with an active **SFT Anchor Loss** to eliminate generative degeneration and collapse.
+* **Instruction Fine-Tuning (SFT):** Fully functional Supervised Fine-Tuning pipeline, formatting responses into instruction-following templates using cosine warmup schedules.
 * **Local Apple Silicon (MPS) & Web Chat UI:** Ready-to-use local FastAPI backend + dark-mode ChatGPT-style frontend, executing offline on Mac Metal (`mps`) or NVIDIA CUDA.
-* **Single-Piece Git LFS Weights:** Complete 476M Phase 5 DPO aligned weights (`best.pt`) tracked directly in repository via Git LFS.
+* **Single-Piece Git LFS Weights:** Complete 476M SFT aligned weights (`best.pt`) tracked directly in repository via Git LFS.
 
 ---
 
@@ -94,15 +92,14 @@
 
 ---
 
-## 🔬 The 5-Phase Engineering Lifecycle
+## 🔬 The 4-Phase Engineering Lifecycle
 
 ```mermaid
 graph TD
     A[Phase 1: Architecture & Engine] --> B[Phase 2: 4.5B Token Dataset Pipeline]
     B --> C[Phase 3: DDP Pretraining 4.5B Tokens]
     C --> D[Phase 4: Supervised Fine-Tuning SFT]
-    D --> E[Phase 5: Direct Preference Optimization DPO]
-    E --> F[Phase 6: Local Deployment & Web App]
+    D --> E[Phase 5: Local Deployment & Web App]
 ```
 
 ### Phase 1: Architecture & Custom DDP Engine
@@ -137,12 +134,6 @@ graph TD
   {response}
   ```
 * Trained with conservative learning rate (`1.5e-5`), cosine warmup, and effective batch size of 64 to prevent catastrophic forgetting.
-
-### Phase 5: Direct Preference Optimization (DPO)
-* Aligned model responses to prefer clean, well-structured, syntax-compliant outputs over degenerated hallucinations.
-* **ZeRO-1 Memory Optimization:** Implemented PyTorch `ZeroRedundancyOptimizer` with `fused=False` to shard optimizer states across GPUs, reclaiming ~2GB of VRAM per rank and preventing OOM on 16GB T4 cards.
-* **Negative Log-Probability Anchor Loss:** Included an anchor regularization term ($L_{SFT} = -\log \pi_\theta(y_w \mid x)$) directly from chosen logits with zero extra VRAM overhead, preventing token collapse.
-* **Results:** Margin climbed steadily from `0.00` to `+0.4621`, proving clear mathematical separation between chosen and rejected generations.
 
 ---
 
@@ -197,7 +188,7 @@ Run one-off generations directly from your terminal:
 ```bash
 cd "Axiom Model"
 
-# Generate with the Phase 5 DPO Aligned Model
+# Generate with the Phase 4 SFT Aligned Model
 python3 generate.py \
     --checkpoint "best.pt" \
     --prompt "### System:\nYou are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n### User:\nWrite a python function to check if a number is prime.\n\n### Assistant:\n" \
@@ -208,7 +199,7 @@ python3 generate.py \
 
 Run the automated verification litmus tests:
 ```bash
-python3 test_dpo.py
+python3 test_sft.py
 ```
 
 ---
@@ -230,14 +221,6 @@ torchrun --nproc_per_node=2 "Axiom Model/train_sft.py" \
     --sft_data "dataset/sft/sft_data.pt"
 ```
 
-### Direct Preference Optimization (Phase 5)
-```bash
-torchrun --nproc_per_node=2 "Axiom Model/train_dpo.py" \
-    --config "Axiom Model/axiom_model/configs/500M.yaml" \
-    --dpo_data "dataset/dpo/dpo_data.pt" \
-    --base_sft_path "checkpoints_sft/best.pt"
-```
-
 ---
 
 ## 📂 Repository Structure
@@ -249,7 +232,7 @@ Axiom-V2/
 ├── .gitignore                     # Clean environment filter (allows best.pt)
 │
 ├── Axiom Model/                   # Core Model, Training & Serving Directory
-│   ├── best.pt                    # Final 476M Phase 5 DPO Aligned Weights (1.9GB Git LFS)
+│   ├── best.pt                    # Final 476M Phase 4 SFT Weights (1.9GB Git LFS)
 │   ├── app.py                     # FastAPI backend local web server
 │   ├── generate.py                # High-efficiency inference engine (KV-cache, RoPE, Repetition Penalty)
 │   ├── requirements.txt           # Python dependencies
@@ -269,14 +252,11 @@ Axiom-V2/
 │   │       ├── checkpoint.py      # Atomic checkpointing with optimizer serialization toggles
 │   │       ├── dataloader.py      # Binary memmap high-throughput dataloader
 │   │       ├── sft_dataloader.py  # ChatML instruction packing dataloader
-│   │       ├── dpo_dataloader.py  # Pairwise preference (chosen/rejected) dataloader
 │   │       └── profiler.py        # MFU & Hardware throughput profiler
 │   │
 │   ├── train_ddp.py               # Phase 3: Distributed Pretraining Engine
 │   ├── train_sft.py               # Phase 4: Supervised Fine-Tuning Engine
-│   ├── train_dpo.py               # Phase 5: ZeRO-1 Direct Preference Optimization Engine
 │   │
-│   ├── test_dpo.py                # Post-DPO verification suite
 │   ├── test_sft.py                # Post-SFT verification suite
 │   └── test_engine.py             # KV-cache vs non-KV equivalence tests
 │
@@ -287,14 +267,13 @@ Axiom-V2/
 
 ## 🛠️ Key Engineering Breakthroughs
 
-### 1. Eliminating AdamW Lazy Initialization OOM in DPO
-During multi-GPU DPO on 16GB cards, hosting both the active **Policy Model** and the frozen **Reference Model** pushes VRAM to ~12GB. Standard PyTorch `AdamW` lazily allocates momentum and variance buffers on `step()`, spiking memory by ~3.8GB and triggering an instant out-of-memory crash. 
-* **Fix:** Implemented PyTorch's `ZeroRedundancyOptimizer` (ZeRO-1) to shard optimizer states across both GPUs, reducing per-card state overhead by 50% (~1.9GB).
-* **Stability:** Disabled `fused=True` during ZeRO distribution to prevent massive contiguous buffer allocations during gradient stepping.
+### 1. Slashing Inter-GPU Communication by 96%
+Multi-GPU training over consumer PCIe (like Kaggle's dual T4s) is severely bottlenecked by cross-GPU gradient synchronization (NCCL `all_reduce`).
+* **Fix:** Using the PyTorch `model.no_sync()` context manager, the gradients are accumulated locally for 31 micro-steps, and only synchronized on the 32nd step. This slashes the NCCL communication penalty, driving hardware utilization (MFU) dramatically higher.
 
-### 2. Preventing DPO Degeneration with SFT Anchor Loss
-Without a grounding signal, small models undergoing DPO can degenerate into repetitive mathematical tokens that artificially maximize the implicit reward margin while destroying natural language syntax.
-* **Fix:** Added an implicit SFT Anchor Loss directly computed from chosen log probabilities ($\mathcal{L}_{anchor} = -\frac{1}{N} \sum \log \pi_\theta(y_w \mid x)$) with zero extra graph allocations, forcing the model to retain syntax and formatting.
+### 2. Memory-Mapped High-Throughput Streaming
+Cloud environments enforce strict `/dev/shm` RAM limits, crashing traditional in-memory `DataLoader` pipelines.
+* **Fix:** Structured the 4.5B token dataset as a monolithic 18GB binary sequence of `uint32` integers and accessed it via `numpy.memmap`. The OS manages page faults dynamically, allowing massive datasets to stream effortlessly without exhausting physical memory.
 
 ### 3. Non-Persistent RoPE Buffer Serialization
 Standard PyTorch buffers are saved inside `state_dict`. Registering RoPE frequencies (`freqs_cis`) as persistent creates device mismatch crashes when loading across CPU, CUDA, and Apple MPS.
