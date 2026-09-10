@@ -32,26 +32,7 @@ export default function Header({
 
       {/* Action buttons */}
       <div className="flex items-center gap-1.5 sm:gap-2">
-        {hasMessages && (
-          <>
-            <button
-              onClick={onExportChat}
-              title="Export Conversation to Markdown"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-dark-850 hover:bg-dark-800 border border-dark-750 transition-all"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Export</span>
-            </button>
 
-            <button
-              onClick={onClearChat}
-              title="Clear current chat"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-dark-850 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </>
-        )}
 
         <button
           onClick={onOpenSettings}
