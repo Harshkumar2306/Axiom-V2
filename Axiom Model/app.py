@@ -12,15 +12,7 @@ from typing import Optional, List, Dict, Any
 from generate import load_model, generate_stream_generator
 from rag_engine import RAGEngine, WebSearchEngine
 
-app = FastAPI(title="Axiom AI Engine with Deep RAG & Live Web Search")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from contextlib import asynccontextmanager
 
 DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 MODEL = None
@@ -28,8 +20,8 @@ ENC = tiktoken.get_encoding("cl100k_base")
 rag_engine: Optional[RAGEngine] = None
 web_engine: Optional[WebSearchEngine] = None
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global MODEL, rag_engine, web_engine
     checkpoint_path = "best.pt"
     if not os.path.exists(checkpoint_path):
@@ -45,6 +37,18 @@ async def startup_event():
         print("✅ Deep RAG & Web Search Engines initialized.")
     except Exception as e:
         print(f"⚠️ Failed to initialize RAG/Web engines: {e}")
+    yield
+    print("🛑 Axiom server shutting down...")
+
+app = FastAPI(title="Axiom AI Engine with Deep RAG & Live Web Search", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -169,10 +173,35 @@ async def delete_rag_documents(filename: Optional[str] = None):
         rag_engine.clear()
     return {"status": "ok", "documents": rag_engine.list_documents()}
 
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "model_loaded": MODEL is not None,
+        "device": DEVICE,
+        "rag_chunks": len(rag_engine.chunks) if rag_engine else 0,
+        "rag_documents": len(rag_engine.list_documents()) if rag_engine else 0
+    }
+
 @app.get("/")
 async def serve_ui():
-    with open("templates/index.html", "r") as f:
-        return HTMLResponse(content=f.read(), status_code=200)
+    template_path = "templates/index.html"
+    if os.path.exists(template_path):
+        with open(template_path, "r") as f:
+            return HTMLResponse(content=f.read(), status_code=200)
+    return HTMLResponse(
+        content="""
+        <html>
+            <body style="background:#09090b;color:#f4f4f5;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;">
+                <h1 style="color:#06b6d4;">Axiom AI Backend Engine is Running</h1>
+                <p>FastAPI inference server with Deep RAG & Live Web Search active.</p>
+                <p>Open <a href="http://localhost:5173" style="color:#38bdf8;">http://localhost:5173</a> to use the React UI.</p>
+                <p>Explore <a href="/docs" style="color:#38bdf8;">/docs</a> for Swagger API specifications.</p>
+            </body>
+        </html>
+        """,
+        status_code=200
+    )
 
 if __name__ == "__main__":
     import uvicorn

@@ -8,7 +8,12 @@ export default function CodeBlock({ code, language }) {
 
   const lang = language ? language.toLowerCase() : 'plaintext';
   const validLang = hljs.getLanguage(lang) ? lang : 'plaintext';
-  const highlightedCode = hljs.highlight(code, { language: validLang }).value;
+  let highlightedCode = code;
+  try {
+    highlightedCode = hljs.highlight(code, { language: validLang }).value;
+  } catch {
+    highlightedCode = code;
+  }
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);

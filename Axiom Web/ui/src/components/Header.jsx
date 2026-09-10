@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Trash2, Sliders, Menu, Sparkles } from 'lucide-react';
+import { Sliders, Menu } from 'lucide-react';
 
 export default function Header({
   onToggleSidebar,

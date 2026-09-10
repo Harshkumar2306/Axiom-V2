@@ -113,7 +113,7 @@ class RAGEngine:
             raise ValueError("Document was too short to create meaningful chunks.")
 
         texts = [c["text"] for c in new_chunks]
-        new_embeddings = self.encoder.encode(texts, convert_to_tensor=True, show_progress_bar=False).to(self.device)
+        new_embeddings = self.encoder.encode(texts, batch_size=32, convert_to_tensor=True, show_progress_bar=False).to(self.device)
         # Normalize for cosine similarity via dot product
         new_embeddings = torch.nn.functional.normalize(new_embeddings, p=2, dim=1)
 
@@ -132,7 +132,7 @@ class RAGEngine:
             "total_documents": len(self.list_documents())
         }
 
-    def search(self, query: str, top_k: int = 3, min_similarity: float = 0.25) -> List[Dict[str, Any]]:
+    def search(self, query: str, top_k: int = 3, min_similarity: float = 0.20) -> List[Dict[str, Any]]:
         if self.embeddings is None or len(self.chunks) == 0:
             return []
 
@@ -216,7 +216,9 @@ class WebSearchEngine:
 
     def search_wikipedia_fallback(self, query: str, max_results: int = 2) -> List[Dict[str, Any]]:
         try:
-            search_url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={httpx.URL(query).raw_path.decode()}&utf8=&format=json"
+            import urllib.parse
+            encoded_query = urllib.parse.quote_plus(query)
+            search_url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={encoded_query}&utf8=&format=json"
             resp = self.client.get(search_url, timeout=3.0)
             if resp.status_code == 200:
                 data = resp.json()

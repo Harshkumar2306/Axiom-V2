@@ -18,6 +18,7 @@ def sample_top_p(probs, p):
     next_token = torch.gather(probs_idx, -1, next_token)
     return next_token
 
+@torch.no_grad()
 def generate(model, enc, prompt, max_new_tokens, temperature=0.2, top_k=50, top_p=0.9, repetition_penalty=1.0, use_kv_cache=True, stream=True):
     device = next(model.parameters()).device
     tokens = enc.encode(prompt)
@@ -35,62 +36,62 @@ def generate(model, enc, prompt, max_new_tokens, temperature=0.2, top_k=50, top_
     
     t0 = time.perf_counter()
     
-    with torch.inference_mode():
-        for i in range(max_new_tokens):
-            if use_kv_cache:
-                # Prefill (i=0) processes the entire prompt. Incremental decoding (i>0) processes only the last token.
-                if i == 0:
-                    input_ids = tokens
-                else:
-                    input_ids = tokens[:, -1:]
-                    start_pos = tokens.shape[1] - 1
-                
-                try:
-                    logits, kv_cache = model(input_ids, start_pos=start_pos, kv_cache=kv_cache, return_cache=True)
-                except ValueError as e:
-                    if stream: print(f"\n[Generation Stopped: {e}]")
-                    break
+    for i in range(max_new_tokens):
+        if use_kv_cache:
+            if i == 0:
+                input_ids = tokens
             else:
-                try:
-                    logits = model(tokens, return_cache=False)
-                except ValueError as e:
-                    if stream: print(f"\n[Generation Stopped: {e}]")
-                    break
-                    
-            next_token_logits = logits[:, -1, :]
+                input_ids = tokens[:, -1:].clone()
+                start_pos = tokens.shape[1] - 1
             
-            # Repetition Penalty (applied ONLY to generated tokens, NEVER prompt tokens!)
-            if repetition_penalty != 1.0 and generated_tokens:
-                for t in set(generated_tokens):
-                    if next_token_logits[0, t] > 0:
-                        next_token_logits[0, t] /= repetition_penalty
-                    else:
-                        next_token_logits[0, t] *= repetition_penalty
-            
-            if temperature == 0.0:
-                idx_next = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-            else:
-                next_token_logits = next_token_logits / temperature
-                
-                if top_k > 0:
-                    v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
-                    next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
-                
-                probs = F.softmax(next_token_logits, dim=-1)
-                
-                if top_p > 0.0 and top_p < 1.0:
-                    idx_next = sample_top_p(probs, top_p)
-                else:
-                    idx_next = torch.multinomial(probs, num_samples=1)
-            
-            tokens = torch.cat((tokens, idx_next), dim=1)
-            generated_tokens.append(idx_next.item())
-            
-            if stream:
-                print(enc.decode([idx_next.item()]), end="", flush=True)
-                
-            if idx_next.item() == 100257: # <|endoftext|> token
+            try:
+                logits, kv_cache = model(input_ids, start_pos=start_pos, kv_cache=kv_cache, return_cache=True)
+            except ValueError as e:
+                if stream: print(f"\n[Generation Stopped: {e}]")
                 break
+        else:
+            try:
+                logits = model(tokens, return_cache=False)
+            except ValueError as e:
+                if stream: print(f"\n[Generation Stopped: {e}]")
+                break
+                
+        next_token_logits = logits[:, -1, :].clone()
+        
+        # Repetition Penalty (applied ONLY to generated tokens, NEVER prompt tokens!)
+        if repetition_penalty != 1.0 and generated_tokens:
+            for t in set(generated_tokens):
+                if next_token_logits[0, t] > 0:
+                    next_token_logits[0, t] /= repetition_penalty
+                else:
+                    next_token_logits[0, t] *= repetition_penalty
+        
+        if temperature <= 0.01:
+            idx_next = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+        else:
+            effective_temp = max(float(temperature), 0.05)
+            next_token_logits = next_token_logits / effective_temp
+            
+            if top_k > 0:
+                v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
+                next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
+            
+            probs = F.softmax(next_token_logits, dim=-1)
+            
+            if top_p > 0.0 and top_p < 1.0:
+                idx_next = sample_top_p(probs, top_p)
+            else:
+                idx_next = torch.multinomial(probs, num_samples=1)
+        
+        idx_next = idx_next.clone().detach()
+        tokens = torch.cat((tokens, idx_next), dim=1)
+        generated_tokens.append(idx_next.item())
+        
+        if stream:
+            print(enc.decode([idx_next.item()]), end="", flush=True)
+            
+        if idx_next.item() == 100257: # <|endoftext|> token
+            break
                 
     t1 = time.perf_counter()
     speed = len(generated_tokens) / (t1 - t0) if (t1 - t0) > 0 else 0
