@@ -226,3 +226,70 @@ if __name__ == "__main__":
             repetition_penalty=args.repetition_penalty, 
             use_kv_cache=not args.disable_kv_cache
         )
+
+def generate_stream_generator(model, enc, prompt, max_new_tokens, temperature=0.2, top_k=50, top_p=0.9, repetition_penalty=1.0, use_kv_cache=True):
+    device = next(model.parameters()).device
+    tokens = enc.encode(prompt)
+    prompt_len = len(tokens)
+    tokens = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0)
+    
+    kv_cache = None
+    start_pos = 0
+    generated_tokens = []
+    
+    t0 = time.perf_counter()
+    
+    with torch.inference_mode():
+        for i in range(max_new_tokens):
+            if use_kv_cache:
+                if i == 0:
+                    input_ids = tokens
+                else:
+                    input_ids = tokens[:, -1:]
+                    start_pos = tokens.shape[1] - 1
+                try:
+                    logits, kv_cache = model(input_ids, start_pos=start_pos, kv_cache=kv_cache, return_cache=True)
+                except ValueError as e:
+                    break
+            else:
+                try:
+                    logits = model(tokens, return_cache=False)
+                except ValueError as e:
+                    break
+                    
+            next_token_logits = logits[:, -1, :]
+            
+            if repetition_penalty != 1.0 and generated_tokens:
+                for t in set(generated_tokens):
+                    if next_token_logits[0, t] > 0:
+                        next_token_logits[0, t] /= repetition_penalty
+                    else:
+                        next_token_logits[0, t] *= repetition_penalty
+            
+            if temperature == 0.0:
+                idx_next = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+            else:
+                next_token_logits = next_token_logits / temperature
+                if top_k > 0:
+                    v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
+                    next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
+                
+                probs = F.softmax(next_token_logits, dim=-1)
+                
+                if top_p > 0.0 and top_p < 1.0:
+                    idx_next = sample_top_p(probs, top_p)
+                else:
+                    idx_next = torch.multinomial(probs, num_samples=1)
+            
+            tokens = torch.cat((tokens, idx_next), dim=1)
+            generated_tokens.append(idx_next.item())
+            
+            if idx_next.item() == 100257: # <|endoftext|>
+                break
+                
+            yield enc.decode([idx_next.item()])
+            
+    t1 = time.perf_counter()
+    speed = len(generated_tokens) / (t1 - t0) if (t1 - t0) > 0 else 0
+    # Yield a special token indicating speed at the end
+    yield f"__AXIOM_SPEED_{speed:.2f}__"

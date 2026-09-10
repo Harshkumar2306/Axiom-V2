@@ -1,14 +1,14 @@
 import os
 import torch
 import tiktoken
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+import asyncio
+from typing import Optional
 
-import sys
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from generate import load_model, generate
+from generate import load_model, generate_stream_generator
 
 app = FastAPI()
 
@@ -20,19 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global variables
+DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 MODEL = None
-ENC = None
-DEVICE = None
+ENC = tiktoken.get_encoding("cl100k_base")
 
 @app.on_event("startup")
 async def startup_event():
-    global MODEL, ENC, DEVICE
-    DEVICE = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
-    print(f"Loading Axiom V2 on {DEVICE}...")
-    ENC = tiktoken.get_encoding("cl100k_base")
-    
-    # Path to your downloaded model
+    global MODEL
     checkpoint_path = "best.pt"
     if not os.path.exists(checkpoint_path):
         print(f"⚠️ Warning: Model not found at {checkpoint_path}!")
@@ -40,8 +34,6 @@ async def startup_event():
         
     MODEL, val_loss = load_model(checkpoint_path, DEVICE)
     print(f"✅ Model loaded successfully! (Val Loss: {val_loss})")
-
-from typing import Optional
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -57,30 +49,29 @@ async def chat_endpoint(request: ChatRequest):
         
     base_sys = request.system_prompt or "You are a highly intelligent, logical, and helpful AI assistant named Axiom."
     
-    # If the user is specifically asking for code or functions, guide the formatting explicitly
     prompt_lower = request.prompt.lower()
-    if any(k in prompt_lower for k in ["code", "python", "function", "script", "def ", "program"]):
-        if "code" not in base_sys.lower():
-            base_sys += " When writing code, provide clean, executable Python code in markdown blocks (```python ... ```)."
+    # Universal Structural Formatting Injection for Small Models
+    formatting_rule = " Format your response clearly. Use markdown code blocks for code, standard structural formatting for letters/emails (greetings, line breaks, sign-offs), and clear headings or bullet points for lists and essays."
+    if "format" not in base_sys.lower():
+        base_sys += formatting_rule
 
     formatted_prompt = f"### System:\n{base_sys}\n\n### User:\n{request.prompt}\n\n### Assistant:\n"
-    
     rep_penalty = request.repetition_penalty if request.repetition_penalty is not None else 1.05
-    
-    generated_tokens, speed = generate(
-        MODEL, 
-        ENC, 
-        formatted_prompt, 
-        max_new_tokens=request.max_tokens, 
-        temperature=request.temperature, 
-        repetition_penalty=rep_penalty,
-        stream=False
-    )
-    
-    response_text = ENC.decode(generated_tokens)
-    response_text = response_text.replace("<|endoftext|>", "").strip()
-    
-    return {"response": response_text, "speed": f"{speed:.2f}"}
+
+    def token_generator():
+        generator = generate_stream_generator(
+            MODEL, 
+            ENC, 
+            formatted_prompt, 
+            max_new_tokens=request.max_tokens, 
+            temperature=request.temperature, 
+            repetition_penalty=rep_penalty
+        )
+        for chunk in generator:
+            yield f"data: {chunk}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(token_generator(), media_type="text/event-stream")
 
 @app.get("/")
 async def serve_ui():
@@ -89,4 +80,4 @@ async def serve_ui():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, log_level="info")
