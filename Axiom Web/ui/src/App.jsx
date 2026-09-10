@@ -390,6 +390,7 @@ export default function App() {
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         temperature={settings.temperature}
+        maxTokens={settings.maxTokens}
         ragDocuments={ragDocuments}
         onClearRagDocuments={handleClearRagDocuments}
         onDeleteRagDocument={handleDeleteRagDocument}
@@ -426,6 +427,8 @@ export default function App() {
           onSend={() => handleSendPrompt()}
           isGenerating={isGenerating}
           temperature={settings.temperature}
+          maxTokens={settings.maxTokens}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           isWebSearch={isWebSearch}
           setIsWebSearch={setIsWebSearch}
           uploadedDocs={ragDocuments}

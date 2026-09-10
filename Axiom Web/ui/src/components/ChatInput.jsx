@@ -7,6 +7,8 @@ export default function ChatInput({
   onSend,
   isGenerating,
   temperature,
+  maxTokens,
+  onOpenSettings,
   isWebSearch,
   setIsWebSearch,
   uploadedDocs = [],
@@ -112,10 +114,17 @@ export default function ChatInput({
         <div className="absolute left-3 right-3 bottom-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             
-            {/* Temp indicator */}
-            <span className="text-[11px] font-mono text-slate-400 bg-dark-800/80 px-2 py-0.5 rounded-md border border-dark-700/50">
-              Temp: {temperature.toFixed(2)}
-            </span>
+            {/* Clickable Temp & Token Pills */}
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              title="Click to adjust Temperature & Max Tokens in Model Parameters (Cmd+,)"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-dark-800/80 hover:bg-dark-750 border border-dark-700/60 text-[11px] font-mono text-slate-300 hover:text-white transition-colors cursor-pointer group"
+            >
+              <span>Temp: <strong className="text-brand-400 font-medium">{temperature.toFixed(2)}</strong></span>
+              <span className="text-slate-600">•</span>
+              <span>Max: <strong className="text-brand-400 font-medium">{maxTokens || 512}</strong> tok</span>
+            </button>
 
             {/* Live Web Search Toggle */}
             <button

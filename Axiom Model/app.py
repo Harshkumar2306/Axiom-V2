@@ -60,6 +60,7 @@ async def chat_endpoint(request: ChatRequest):
     if MODEL is None:
         return {"response": "Model is not loaded. Please check server logs.", "speed": "0.0"}
         
+    print(f"📩 Chat request: max_tokens={request.max_tokens}, temperature={request.temperature}, web_search={request.web_search}")
     base_sys = request.system_prompt or "You are a highly intelligent, logical, and helpful AI assistant named Axiom."
     
     collected_sources: List[Dict[str, Any]] = []
