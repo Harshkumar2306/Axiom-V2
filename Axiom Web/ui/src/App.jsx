@@ -201,7 +201,8 @@ export default function App() {
         body: JSON.stringify({
           prompt: promptToSend,
           max_tokens: settings.maxTokens,
-          temperature: settings.temperature
+          temperature: settings.temperature,
+          system_prompt: settings.systemPrompt
         })
       });
 

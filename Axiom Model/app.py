@@ -41,17 +41,31 @@ async def startup_event():
     MODEL, val_loss = load_model(checkpoint_path, DEVICE)
     print(f"✅ Model loaded successfully! (Val Loss: {val_loss})")
 
+from typing import Optional
+
 class ChatRequest(BaseModel):
     prompt: str
-    max_tokens: int = 150
+    max_tokens: int = 300
     temperature: float = 0.2
+    system_prompt: Optional[str] = None
+    repetition_penalty: float = 1.05
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     if MODEL is None:
         return {"response": "Model is not loaded. Please check server logs.", "speed": "0.0"}
         
-    formatted_prompt = f"### System:\nYou are a highly intelligent, logical, and helpful AI assistant named Axiom.\n\n### User:\n{request.prompt}\n\n### Assistant:\n"
+    base_sys = request.system_prompt or "You are a highly intelligent, logical, and helpful AI assistant named Axiom."
+    
+    # If the user is specifically asking for code or functions, guide the formatting explicitly
+    prompt_lower = request.prompt.lower()
+    if any(k in prompt_lower for k in ["code", "python", "function", "script", "def ", "program"]):
+        if "code" not in base_sys.lower():
+            base_sys += " When writing code, provide clean, executable Python code in markdown blocks (```python ... ```)."
+
+    formatted_prompt = f"### System:\n{base_sys}\n\n### User:\n{request.prompt}\n\n### Assistant:\n"
+    
+    rep_penalty = request.repetition_penalty if request.repetition_penalty is not None else 1.05
     
     generated_tokens, speed = generate(
         MODEL, 
@@ -59,7 +73,7 @@ async def chat_endpoint(request: ChatRequest):
         formatted_prompt, 
         max_new_tokens=request.max_tokens, 
         temperature=request.temperature, 
-        repetition_penalty=1.15,
+        repetition_penalty=rep_penalty,
         stream=False
     )
     
