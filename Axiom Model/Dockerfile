@@ -9,14 +9,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+RUN useradd -m -u 1000 user && \
+    mkdir -p /app /home/user/.cache && \
+    chown -R user:user /app /home/user
+
+COPY --chown=user:user requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-
-# Hugging Face Spaces user & environment setup
-RUN useradd -m -u 1000 user && \
-    chown -R user:user /app
+COPY --chown=user:user . .
 
 USER user
 ENV HOME=/home/user \

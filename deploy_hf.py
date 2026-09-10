@@ -33,10 +33,11 @@ def deploy():
     api = HfApi(token=args.token)
 
     try:
-        api.upload_folder(
+        commit_info = api.upload_folder(
             folder_path=model_dir,
             repo_id=args.repo_id,
             repo_type="space",
+            commit_message="Deploy Axiom V2 Backend: 476M SFT Foundation Model, Vector RAG & Search",
             ignore_patterns=[
                 "__pycache__/*", 
                 "*.pyc", 
@@ -44,12 +45,20 @@ def deploy():
                 "checkpoints/*", 
                 "dataset/*", 
                 "venv/*",
-                ".DS_Store"
+                ".DS_Store",
+                "best.pt"
             ]
         )
         print("\n🎉 SUCCESS! All model files, Vector RAG engine, and Docker configuration uploaded.")
+        print(f"📌 Commit: {commit_info}")
         print(f"👉 Monitor build logs at: https://huggingface.co/spaces/{args.repo_id}")
         print(f"👉 Once built, your API endpoint will be: https://{args.repo_id.replace('/', '-')}.hf.space")
+        
+        try:
+            runtime = api.get_space_runtime(args.repo_id)
+            print(f"ℹ️ Current Space Stage: {runtime.stage}")
+        except Exception:
+            pass
     except Exception as e:
         print(f"\n❌ Deployment failed: {e}")
         sys.exit(1)

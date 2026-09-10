@@ -25,10 +25,21 @@ async def lifespan(app: FastAPI):
     global MODEL, rag_engine, web_engine
     checkpoint_path = "best.pt"
     if not os.path.exists(checkpoint_path):
-        print(f"⚠️ Warning: Model not found at {checkpoint_path}!")
-    else:
+        print(f"📥 Local checkpoint not found at '{checkpoint_path}'. Fetching from Hugging Face Model Hub...")
+        try:
+            from huggingface_hub import hf_hub_download
+            hf_repo = os.environ.get("HF_MODEL_REPO", "harsh0o23/Axiom-V2-476M")
+            hf_token = os.environ.get("HF_TOKEN")
+            checkpoint_path = hf_hub_download(repo_id=hf_repo, filename="best.pt", token=hf_token)
+            print(f"✅ Downloaded 476M weights from {hf_repo} to {checkpoint_path}")
+        except Exception as e:
+            print(f"❌ Failed to download model weights from Hugging Face Hub: {e}")
+
+    if os.path.exists(checkpoint_path):
         MODEL, val_loss = load_model(checkpoint_path, DEVICE)
         print(f"✅ Model loaded successfully! (Val Loss: {val_loss})")
+    else:
+        print(f"⚠️ Warning: Model weights could not be loaded!")
 
     # Initialize RAG & Web Search Engine
     try:

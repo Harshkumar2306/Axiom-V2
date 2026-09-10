@@ -1,3 +1,13 @@
+---
+title: Axiom V2 API
+emoji: ⚡
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 <div align="center">
 
 # 🧠 Axiom V2: Custom 476M Foundation Model
