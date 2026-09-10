@@ -12,7 +12,25 @@ from typing import Optional, List, Dict, Any
 from generate import load_model, generate_stream_generator
 from rag_engine import RAGEngine, WebSearchEngine
 
+import httpx
+
 from contextlib import asynccontextmanager
+
+async def keep_alive_daemon():
+    """Background task to periodically ping the public Space URL to prevent sleeping."""
+    await asyncio.sleep(45)  # Wait 45 seconds after container boot
+    space_host = os.environ.get("SPACE_HOST")
+    ping_url = f"https://{space_host}/health" if space_host else "https://harsh0o23-smart-agro-api.hf.space/health"
+    print(f"💓 Keep-alive background daemon active. Target: {ping_url}")
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.get(ping_url)
+                print(f"💓 Keep-alive ping sent ({res.status_code}) to reset HF inactivity timer.")
+        except Exception as e:
+            print(f"⚠️ Keep-alive ping notice: {e}")
+        # Ping every 14 minutes (well within HF's 48-hour inactivity threshold)
+        await asyncio.sleep(14 * 60)
 
 DEVICE = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 MODEL = None
@@ -48,7 +66,11 @@ async def lifespan(app: FastAPI):
         print("✅ Deep RAG & Web Search Engines initialized.")
     except Exception as e:
         print(f"⚠️ Failed to initialize RAG/Web engines: {e}")
+
+    # Launch Keep-Alive Background Daemon
+    keep_alive_job = asyncio.create_task(keep_alive_daemon())
     yield
+    keep_alive_job.cancel()
     print("🛑 Axiom server shutting down...")
 
 app = FastAPI(title="Axiom AI Engine with Deep RAG & Live Web Search", lifespan=lifespan)
