@@ -48,6 +48,9 @@ export default function ChatInput({
 
         <div className="absolute left-3 right-3 bottom-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-slate-400 bg-dark-800/80 px-2 py-0.5 rounded-md border border-dark-700/50">
+              Temp: {temperature.toFixed(2)}
+            </span>
           </div>
 
           <div className="flex items-center gap-1.5">

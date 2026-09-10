@@ -146,7 +146,7 @@ export default function Sidebar({
                 </div>
                 <div className="text-[11px] leading-tight">
                   <div className="text-slate-200 font-medium">MPS Unified Memory</div>
-                  <div className="text-slate-400 text-[10px]">Engine Active</div>
+                  <div className="text-slate-400 text-[10px]">Temp: {temperature.toFixed(2)}</div>
                 </div>
               </div>
               <Cpu className="w-4 h-4 text-slate-400" />
