@@ -283,9 +283,11 @@ class WebSearchEngine:
                     page_text = " ".join(paragraphs[:3])
 
             block_content = page_text if page_text and len(page_text) > len(snippet) else snippet
-            detailed_context_blocks.append(f"[Source {i+1}: {title}]\nURL: {url}\nContent: {block_content}")
+            clean_slice = re.sub(r'\s+', ' ', block_content).strip()[:350]
+            if clean_slice:
+                detailed_context_blocks.append(f"- {clean_slice}")
 
-        combined_context = "\n\n".join(detailed_context_blocks)
+        combined_context = "\n".join(detailed_context_blocks)
         return {
             "context": combined_context,
             "sources": sources

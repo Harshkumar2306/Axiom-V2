@@ -71,7 +71,7 @@ async def chat_endpoint(request: ChatRequest):
             print(f"🔍 Executing live web search for: '{request.prompt}'...")
             search_data = web_engine.search_and_deep_scrape(request.prompt, max_results=3)
             if search_data.get("context"):
-                context_sections.append(f"--- LIVE WEB SEARCH CONTEXT ---\n{search_data['context']}")
+                context_sections.append(search_data['context'])
                 for s in search_data.get("sources", []):
                     collected_sources.append({
                         "type": "web",
@@ -92,29 +92,23 @@ async def chat_endpoint(request: ChatRequest):
                 for idx, match in enumerate(doc_matches):
                     src_name = match.get("source", "Document")
                     text_content = match.get("text", "")
-                    score = match.get("score", 0.0)
-                    doc_context_items.append(f"[Document {idx+1}: {src_name} (Similarity: {score})]\n{text_content}")
+                    clean_doc_slice = text_content.strip()[:350]
+                    doc_context_items.append(f"- From {src_name}: {clean_doc_slice}")
                     collected_sources.append({
                         "type": "doc",
                         "title": src_name,
                         "url": "",
                         "snippet": text_content[:180] + "..." if len(text_content) > 180 else text_content
                     })
-                context_sections.append("--- LOCAL KNOWLEDGE BASE (DOCUMENTS) ---\n" + "\n\n".join(doc_context_items))
+                context_sections.append("\n".join(doc_context_items))
                 print(f"✅ Document RAG injected ({len(doc_matches)} matching chunks).")
         except Exception as e:
             print(f"⚠️ Document RAG search error: {e}")
 
-    # Inject grounded context if available
+    # Inject grounded context cleanly without rogue turn delimiters
     if context_sections:
-        grounding_instruction = (
-            "\n\n### GROUND TRUTH EXTERNAL CONTEXT:\n"
-            + "\n\n".join(context_sections)
-            + "\n\n### INSTRUCTION FOR USING CONTEXT:\n"
-            "Carefully answer the user prompt using the factual context provided above. "
-            "Be precise, directly answer the question, and cite facts from the sources when available."
-        )
-        base_sys += grounding_instruction
+        base_sys += "\n\nReference Information:\n" + "\n".join(context_sections)
+        base_sys += "\n\nInstruction: Answer the user's question clearly and completely in full sentences based on the reference information above."
 
     # Universal Structural Formatting Injection for Small Models
     formatting_rule = " Format your response clearly. Use markdown code blocks for code, standard structural formatting for letters/emails (greetings, line breaks, sign-offs), and clear headings or bullet points for lists and essays."
