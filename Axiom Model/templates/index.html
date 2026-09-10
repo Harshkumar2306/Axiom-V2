@@ -1,114 +1,289 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Axiom V2 Chat</title>
+    <title>Axiom V2 | AI Studio</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Marked.js for Markdown Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js for Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <!-- Feather Icons -->
+    <script src="https://unpkg.com/feather-icons"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            850: '#1e1e24',
+                            900: '#14141a',
+                            950: '#0b0b0e'
+                        },
+                        accent: {
+                            500: '#8b5cf6',
+                            600: '#7c3aed'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #343541; color: #ececf1; display: flex; flex-direction: column; height: 100vh; }
-        .header { text-align: center; padding: 15px; background-color: #202123; border-bottom: 1px solid #4d4d4f; font-weight: bold; font-size: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10; }
-        .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .message-row { width: 100%; max-width: 800px; display: flex; margin-bottom: 20px; }
-        .message-row.user { justify-content: flex-end; }
-        .message { padding: 15px 20px; border-radius: 8px; max-width: 80%; line-height: 1.5; white-space: pre-wrap; font-size: 15px;}
-        .message.user { background-color: #10a37f; color: white; border-bottom-right-radius: 2px; }
-        .message.axiom { background-color: #444654; color: #d1d5db; border: 1px solid #565869; border-bottom-left-radius: 2px; }
-        .input-container { padding: 20px; background-color: #343541; display: flex; justify-content: center; border-top: 1px solid #4d4d4f; }
-        .input-box { display: flex; width: 100%; max-width: 800px; background-color: #40414f; border: 1px solid #565869; border-radius: 8px; padding: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
-        textarea { flex: 1; background: transparent; border: none; color: white; font-size: 16px; resize: none; outline: none; font-family: inherit; padding-top: 8px; }
-        button { background-color: #10a37f; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; margin-left: 10px; }
-        button:hover { background-color: #1a7f64; }
-        button:disabled { background-color: #565869; cursor: not-allowed; }
-        .speed { font-size: 11px; color: #8e8ea0; margin-top: 8px; font-style: italic; }
-        pre { background: #202123; padding: 12px; border-radius: 5px; overflow-x: auto; border: 1px solid #343541; }
-        code { font-family: 'Courier New', Courier, monospace; color: #e2e8f0; }
-        /* Simple spinner */
-        .loader { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #fff; animation: pulse 1.5s infinite; margin-right: 5px; }
-        @keyframes pulse { 0% { opacity: .2; } 50% { opacity: 1; } 100% { opacity: .2; } }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0b0b0e; color: #f8fafc; }
+        .code-font { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Markdown Pro Styling */
+        .prose p { margin-bottom: 1rem; line-height: 1.7; }
+        .prose ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 1rem; }
+        .prose ol { list-style-type: decimal; margin-left: 1.5rem; margin-bottom: 1rem; }
+        .prose h1, .prose h2, .prose h3 { font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #f8fafc; }
+        .prose pre { padding: 0 !important; margin: 1.5rem 0 !important; background: transparent !important; border-radius: 0.5rem; overflow: hidden; border: 1px solid #334155; }
+        .prose code { font-family: 'JetBrains Mono', monospace; font-size: 0.9em; background: #1e293b; padding: 0.2rem 0.4rem; border-radius: 0.25rem; }
+        .prose pre code { background: #1e1e24 !important; padding: 1.25rem !important; display: block; overflow-x: auto; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .loader { display: inline-flex; align-items: center; gap: 4px; }
+        .loader span { width: 6px; height: 6px; border-radius: 50%; background-color: #8b5cf6; animation: bounce 1.4s infinite ease-in-out both; }
+        .loader span:nth-child(1) { animation-delay: -0.32s; }
+        .loader span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
+        .code-header { background: #27272a; padding: 0.5rem 1rem; display: flex; justify-content: space-between; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #a1a1aa; border-bottom: 1px solid #3f3f46; }
+        .copy-btn { cursor: pointer; display: flex; align-items: center; gap: 0.3rem; transition: color 0.2s; }
+        .copy-btn:hover { color: #f4f4f5; }
     </style>
 </head>
-<body>
-    <div class="header">🧠 Axiom V2 Local Intelligence</div>
-    <div class="chat-container" id="chat">
-        <div class="message-row axiom">
-            <div class="message axiom">Hello! I am Axiom V2, running locally on your Mac's Apple Silicon GPU. How can I help you today?</div>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6 py-4 shadow-md z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-accent-600 p-2 rounded-lg shadow-lg shadow-accent-500/20">
+                <i data-feather="cpu" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+                <h1 class="font-semibold text-lg tracking-tight">Axiom Studio</h1>
+                <p class="text-xs text-gray-400 font-medium tracking-wide uppercase">476M Parameters • Offline</p>
+            </div>
         </div>
-    </div>
-    <div class="input-container">
-        <div class="input-box">
-            <textarea id="prompt" rows="1" placeholder="Ask Axiom a question..." oninput="this.style.height = '';this.style.height = this.scrollHeight + 'px'"></textarea>
-            <button id="sendBtn" onclick="sendMessage()">Send</button>
+        <div class="flex items-center gap-4">
+            <span class="flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-3 py-1.5 rounded-full border border-emerald-400/20">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                MPS Hardware Active
+            </span>
         </div>
-    </div>
+    </header>
+
+    <!-- Chat Area -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col items-center relative" id="chat-container">
+        
+        <!-- Welcome Message -->
+        <div class="w-full max-w-4xl flex gap-6 mb-8 group">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center shrink-0 shadow-lg border border-white/10">
+                <i data-feather="zap" class="w-5 h-5 text-white fill-white/20"></i>
+            </div>
+            <div class="flex-1 space-y-2 mt-1">
+                <h3 class="font-semibold text-gray-200">Axiom V2</h3>
+                <div class="prose prose-invert max-w-none text-gray-300">
+                    <p>Welcome to the Axiom Local Studio. I am fully loaded into your Mac's unified memory and running offline. How can I help you architect your next idea?</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Input Area -->
+    <footer class="bg-gray-900 border-t border-gray-800 p-4 shrink-0">
+        <div class="w-full max-w-4xl mx-auto relative">
+            <div class="bg-gray-850 border border-gray-700 rounded-xl shadow-xl flex items-end p-2 focus-within:border-accent-500 focus-within:ring-1 focus-within:ring-accent-500 transition-all">
+                <textarea 
+                    id="prompt-input" 
+                    rows="1" 
+                    placeholder="Message Axiom..." 
+                    class="w-full bg-transparent border-none focus:ring-0 text-gray-100 placeholder-gray-500 resize-none px-4 py-3 max-h-48 code-font text-[15px]"
+                    oninput="this.style.height = ''; this.style.height = Math.min(this.scrollHeight, 200) + 'px';"
+                ></textarea>
+                <button 
+                    id="send-btn" 
+                    onclick="sendMessage()"
+                    class="p-3 mb-1 mr-1 rounded-lg bg-white text-black hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center shadow-sm"
+                >
+                    <i data-feather="arrow-up" class="w-5 h-5 font-bold"></i>
+                </button>
+            </div>
+            <div class="text-center mt-3 text-xs text-gray-500 font-medium">
+                Axiom V2 can make mistakes. Consider verifying critical information.
+            </div>
+        </div>
+    </footer>
 
     <script>
-        const chat = document.getElementById('chat');
-        const promptEl = document.getElementById('prompt');
-        const sendBtn = document.getElementById('sendBtn');
+        // Initialize Icons & Marked.js
+        feather.replace();
+        
+        // Custom Marked renderer to add Copy Buttons and Headers to code blocks
+        const renderer = new marked.Renderer();
+        renderer.code = function({text, lang}) {
+            const language = lang || 'text';
+            const validLanguage = hljs.getLanguage(language) ? language : 'plaintext';
+            const highlighted = hljs.highlight(text, { language: validLanguage }).value;
+            
+            // Generate a random ID for the code block to handle copying
+            const id = 'code-' + Math.random().toString(36).substr(2, 9);
+            
+            return `
+            <div class="my-4 rounded-lg overflow-hidden border border-gray-700 shadow-xl">
+                <div class="code-header">
+                    <span>${language}</span>
+                    <button class="copy-btn hover:text-white transition-colors flex items-center gap-1.5 px-2 py-1 rounded" onclick="copyCode('${id}')">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        Copy
+                    </button>
+                </div>
+                <pre class="!m-0 !rounded-none"><code id="${id}" class="hljs language-${language}">${highlighted}</code></pre>
+            </div>`;
+        };
+        marked.use({ renderer });
 
-        // Simple markdown code block formatter
-        function formatText(text) {
-            // Encode html tags to prevent XSS and formatting issues
-            let formatted = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const chatContainer = document.getElementById('chat-container');
+        const promptInput = document.getElementById('prompt-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Copy functionality
+        window.copyCode = function(id) {
+            const codeEl = document.getElementById(id);
+            const text = codeEl.innerText;
+            navigator.clipboard.writeText(text);
             
-            // Format code blocks
-            formatted = formatted.replace(/```(.*?)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-            
-            // Format inline code
-            formatted = formatted.replace(/`([^`]+)`/g, '<code style="background:#202123;padding:2px 4px;border-radius:3px;">$1</code>');
-            
-            return formatted;
-        }
+            const btn = codeEl.parentElement.previousElementSibling.querySelector('.copy-btn');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-emerald-400">Copied!</span>`;
+            setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+        };
 
         async function sendMessage() {
-            const prompt = promptEl.value.trim();
+            const prompt = promptInput.value.trim();
             if (!prompt) return;
 
-            // Add user message
-            chat.innerHTML += `<div class="message-row user"><div class="message user">${formatText(prompt)}</div></div>`;
-            promptEl.value = '';
-            promptEl.style.height = 'auto';
-            chat.scrollTop = chat.scrollHeight;
-
+            // 1. Add User Message
+            appendUserMessage(prompt);
+            
+            // 2. Reset Input
+            promptInput.value = '';
+            promptInput.style.height = 'auto';
+            promptInput.focus();
+            
+            // 3. Disable UI
             sendBtn.disabled = true;
             
-            // Add loading message
+            // 4. Add Loading Skeleton
             const loadingId = 'loading-' + Date.now();
-            chat.innerHTML += `<div class="message-row axiom" id="${loadingId}">
-                <div class="message axiom">
-                    <span class="loader" style="animation-delay: 0s"></span>
-                    <span class="loader" style="animation-delay: 0.2s"></span>
-                    <span class="loader" style="animation-delay: 0.4s"></span>
-                </div>
-            </div>`;
-            chat.scrollTop = chat.scrollHeight;
+            appendLoading(loadingId);
+            scrollToBottom();
 
             try {
                 const res = await fetch('/chat', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({prompt: prompt, max_tokens: 250, temperature: 0.2})
+                    body: JSON.stringify({prompt: prompt, max_tokens: 500, temperature: 0.2})
                 });
-                const data = await res.json();
                 
+                const data = await res.json();
                 document.getElementById(loadingId).remove();
                 
-                chat.innerHTML += `<div class="message-row axiom">
-                    <div>
-                        <div class="message axiom">${formatText(data.response)}</div>
-                        <div class="speed">⚡ Running on MPS at ${data.speed} tokens/sec</div>
-                    </div>
-                </div>`;
+                // 5. Add Axiom Message
+                appendAxiomMessage(data.response, data.speed);
+                
             } catch (e) {
                 document.getElementById(loadingId).remove();
-                chat.innerHTML += `<div class="message-row axiom"><div class="message axiom" style="color:#ff6b6b;">Error connecting to local server. Make sure it's running!</div></div>`;
+                appendAxiomMessage("⚠️ Connection error. Make sure the local python server is running.", 0);
             }
             
             sendBtn.disabled = false;
-            chat.scrollTop = chat.scrollHeight;
+            scrollToBottom();
+            feather.replace(); // Re-initialize icons for new elements
         }
 
-        promptEl.addEventListener('keypress', function (e) {
+        function appendUserMessage(text) {
+            const html = `
+            <div class="w-full max-w-4xl flex gap-6 mb-8 group justify-end">
+                <div class="flex-1 space-y-2 mt-1">
+                    <h3 class="font-semibold text-gray-200 text-right">You</h3>
+                    <div class="flex justify-end">
+                        <div class="bg-gray-800 text-gray-100 px-5 py-3.5 rounded-2xl rounded-tr-sm inline-block max-w-[85%] shadow-sm border border-gray-700 whitespace-pre-wrap">${escapeHTML(text)}</div>
+                    </div>
+                </div>
+            </div>`;
+            chatContainer.insertAdjacentHTML('beforeend', html);
+        }
+
+        function appendLoading(id) {
+            const html = `
+            <div id="${id}" class="w-full max-w-4xl flex gap-6 mb-8 group">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center shrink-0 shadow-lg border border-white/10">
+                    <i data-feather="zap" class="w-5 h-5 text-white fill-white/20"></i>
+                </div>
+                <div class="flex-1 space-y-2 mt-2">
+                    <h3 class="font-semibold text-gray-200">Axiom V2</h3>
+                    <div class="loader"><span></span><span></span><span></span></div>
+                </div>
+            </div>`;
+            chatContainer.insertAdjacentHTML('beforeend', html);
+            feather.replace();
+        }
+
+        function appendAxiomMessage(markdownText, speed) {
+            // Parse Markdown
+            const parsedHTML = marked.parse(markdownText);
+            
+            const speedBadge = speed > 0 ? 
+                `<div class="mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500 bg-gray-800/50 px-2 py-1 rounded-md border border-gray-700/50">
+                    <svg class="w-3 h-3 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.381z"></path></svg>
+                    Generated at ${speed} tokens/sec
+                </div>` : '';
+
+            const html = `
+            <div class="w-full max-w-4xl flex gap-6 mb-8 group">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center shrink-0 shadow-lg border border-white/10">
+                    <i data-feather="zap" class="w-5 h-5 text-white fill-white/20"></i>
+                </div>
+                <div class="flex-1 space-y-2 mt-1 min-w-0">
+                    <h3 class="font-semibold text-gray-200">Axiom V2</h3>
+                    <div class="prose prose-invert max-w-none text-gray-300 w-full overflow-x-hidden">
+                        ${parsedHTML}
+                    </div>
+                    ${speedBadge}
+                </div>
+            </div>`;
+            chatContainer.insertAdjacentHTML('beforeend', html);
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]));
+        }
+
+        // Enter to submit
+        promptInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
