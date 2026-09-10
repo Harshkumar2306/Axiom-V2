@@ -1,0 +1,8 @@
+{
+  "framework": "vite",
+  "buildCommand": "cd 'Axiom Web/ui' && npm install && npm run build",
+  "outputDirectory": "Axiom Web/ui/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
