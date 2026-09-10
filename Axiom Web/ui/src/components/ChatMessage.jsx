@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, Copy, Check, User, Sparkles } from 'lucide-react';
+import { Zap, Copy, Check, User, Sparkles, Globe, FileText, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
 import MarkdownRenderer from './MarkdownRenderer';
 
@@ -61,6 +61,48 @@ export default function ChatMessage({ message }) {
             <div className="text-slate-200 leading-relaxed">
               <MarkdownRenderer content={message.content} />
             </div>
+
+            {/* Grounded Sources & Citations Tray */}
+            {message.sources && message.sources.length > 0 && (
+              <div className="mt-4 pt-3.5 border-t border-dark-800/90">
+                <div className="text-[11px] font-medium text-slate-400 mb-2.5 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyber-cyan" />
+                  <span>Sources & Citations ({message.sources.length}):</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {message.sources.map((src, sIdx) => (
+                    <a
+                      key={sIdx}
+                      href={src.url || '#'}
+                      target={src.url ? '_blank' : '_self'}
+                      rel="noreferrer"
+                      className="group flex flex-col p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750/80 hover:border-brand-500/40 transition-all text-left shadow-sm"
+                    >
+                      <div className="flex items-center justify-between gap-1.5 mb-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {src.type === 'web' ? (
+                            <Globe className="w-3.5 h-3.5 text-cyber-cyan shrink-0" />
+                          ) : (
+                            <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          )}
+                          <span className="text-xs font-medium text-slate-200 truncate group-hover:text-brand-400 transition-colors">
+                            {src.title}
+                          </span>
+                        </div>
+                        {src.url && (
+                          <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                        )}
+                      </div>
+                      {src.snippet && (
+                        <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                          {src.snippet}
+                        </p>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Assistant Footer Utility Bar */}
             <div className="flex items-center gap-3 mt-3 pt-2 text-xs text-slate-400">

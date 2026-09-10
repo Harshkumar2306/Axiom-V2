@@ -47,6 +47,10 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  // RAG Document state
+  const [ragDocuments, setRagDocuments] = useState([]);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+
   const chatContainerRef = useRef(null);
 
   useEffect(() => {
@@ -62,6 +66,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('axiom_settings', JSON.stringify(settings));
   }, [settings]);
+
+  // Fetch RAG documents on load
+  const fetchRagDocuments = async () => {
+    try {
+      const endpoint = `${settings.apiBaseUrl.replace(/\/$/, '')}/rag/documents`;
+      const res = await fetch(endpoint);
+      if (res.ok) {
+        const data = await res.json();
+        setRagDocuments(data.documents || []);
+      }
+    } catch {
+      // Backend may not be reachable initially
+    }
+  };
+
+  useEffect(() => {
+    fetchRagDocuments();
+  }, [settings.apiBaseUrl]);
 
   const activeConversation = conversations.find((c) => c.id === activeId) || null;
   const messages = activeConversation ? activeConversation.messages : [];
@@ -143,6 +165,58 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // --- Document RAG Actions ---
+  const handleUploadFile = async (file) => {
+    if (!file) return;
+    setIsUploadingDoc(true);
+    try {
+      const endpoint = `${settings.apiBaseUrl.replace(/\/$/, '')}/rag/upload`;
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Document upload failed: ${err.detail || 'Unknown error'}`);
+      } else {
+        await fetchRagDocuments();
+      }
+    } catch (e) {
+      alert(`Network error uploading document: ${e.message}`);
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteRagDocument = async (filename) => {
+    try {
+      const endpoint = `${settings.apiBaseUrl.replace(/\/$/, '')}/rag/documents?filename=${encodeURIComponent(filename)}`;
+      const res = await fetch(endpoint, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchRagDocuments();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleClearRagDocuments = async () => {
+    if (!window.confirm('Clear all indexed documents from the Knowledge Base?')) return;
+    try {
+      const endpoint = `${settings.apiBaseUrl.replace(/\/$/, '')}/rag/documents`;
+      const res = await fetch(endpoint, { method: 'DELETE' });
+      if (res.ok) {
+        setRagDocuments([]);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleSendPrompt = async (customPrompt) => {
     const promptToSend = (customPrompt || input).trim();
     if (!promptToSend || isGenerating) return;
@@ -196,7 +270,8 @@ export default function App() {
           max_tokens: settings.maxTokens,
           temperature: settings.temperature,
           system_prompt: settings.systemPrompt,
-          web_search: isWebSearch
+          web_search: isWebSearch,
+          rag_search: true
         })
       });
 
@@ -208,13 +283,14 @@ export default function App() {
       const decoder = new TextDecoder();
       let streamedResponse = '';
       let finalSpeed = '0.00';
+      let sources = [];
 
       const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       setConversations((prev) =>
         prev.map((c) =>
           c.id === currentChatId
-            ? { ...c, messages: [...c.messages, { role: 'axiom', content: '', speed: null, timestamp: timestampStr }] }
+            ? { ...c, messages: [...c.messages, { role: 'axiom', content: '', speed: null, sources: [], timestamp: timestampStr }] }
             : c
         )
       );
@@ -233,6 +309,16 @@ export default function App() {
             
             if (data.startsWith('__AXIOM_SPEED_')) {
               finalSpeed = data.replace('__AXIOM_SPEED_', '').replace('__', '');
+              continue;
+            }
+
+            if (data.startsWith('__AXIOM_SOURCES__')) {
+              try {
+                const rawJson = data.replace('__AXIOM_SOURCES__', '').replace(/__$/, '');
+                sources = JSON.parse(rawJson);
+              } catch (e) {
+                console.error('Failed to parse sources:', e);
+              }
               continue;
             }
             
@@ -260,6 +346,7 @@ export default function App() {
           if (c.id === currentChatId) {
             const updatedMsgs = [...c.messages];
             updatedMsgs[updatedMsgs.length - 1].speed = finalSpeed;
+            updatedMsgs[updatedMsgs.length - 1].sources = sources;
             return { ...c, messages: updatedMsgs };
           }
           return c;
@@ -274,6 +361,7 @@ export default function App() {
           role: 'axiom',
           content: `⚠️ **Connection Notice:** Unable to reach the backend at \`${settings.apiBaseUrl}\`.\n\nPlease verify that the Python server is running (\`python3 app.py\`) or adjust the API Base URL in **Model Parameters** (\`Cmd+,\`).`,
           speed: 0,
+          sources: [],
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
         setConversations((prev) =>
@@ -302,6 +390,9 @@ export default function App() {
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         temperature={settings.temperature}
+        ragDocuments={ragDocuments}
+        onClearRagDocuments={handleClearRagDocuments}
+        onDeleteRagDocument={handleDeleteRagDocument}
       />
 
       <div className="flex-1 flex flex-col h-full min-w-0 bg-dark-950 relative">
@@ -337,6 +428,10 @@ export default function App() {
           temperature={settings.temperature}
           isWebSearch={isWebSearch}
           setIsWebSearch={setIsWebSearch}
+          uploadedDocs={ragDocuments}
+          isUploadingDoc={isUploadingDoc}
+          onUploadFile={handleUploadFile}
+          onRemoveDoc={handleDeleteRagDocument}
         />
       </div>
 
