@@ -20,14 +20,7 @@ export default function Header({
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Model info pill */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dark-850 border border-dark-750 text-xs">
-            <span className="w-2 h-2 rounded-full bg-cyber-emerald"></span>
-            <span className="font-medium text-slate-200">Axiom 476M SFT</span>
-            <span className="text-slate-400 font-mono text-[10px]">T={temperature.toFixed(2)}</span>
-          </div>
-        </div>
+
       </div>
 
       {/* Action buttons */}
