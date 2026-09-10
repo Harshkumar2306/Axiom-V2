@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS = {
   temperature: 0.2,
   maxTokens: 500,
   systemPrompt: 'You are a highly intelligent, logical, and helpful AI assistant named Axiom.',
-  apiBaseUrl: 'http://localhost:8000'
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 };
 
 export default function App() {

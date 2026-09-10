@@ -95,43 +95,7 @@ export default function SettingsModal({
             </p>
           </div>
 
-          {/* Backend API Endpoint */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-200 flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-cyber-cyan" />
-              Backend API Base URL
-            </label>
-            <input
-              type="text"
-              value={settings.apiBaseUrl}
-              onChange={(e) =>
-                onSaveSettings({ ...settings, apiBaseUrl: e.target.value })
-              }
-              placeholder="http://localhost:8000"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-dark-800 border border-dark-700 text-slate-200 text-sm font-mono focus:border-brand-500 focus:outline-none transition-colors"
-            />
-            <p className="text-xs text-slate-400">
-              Point to a deployed cloud server or your local FastAPI instance.
-            </p>
-          </div>
 
-          {/* System Prompt */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-200">
-              System Instruction
-            </label>
-            <textarea
-              rows={3}
-              value={settings.systemPrompt}
-              onChange={(e) =>
-                onSaveSettings({ ...settings, systemPrompt: e.target.value })
-              }
-              className="w-full p-3 rounded-xl bg-dark-800 border border-dark-700 text-slate-200 text-xs leading-relaxed focus:border-brand-500 focus:outline-none transition-colors resize-none"
-            />
-            <p className="text-xs text-slate-400">
-              Preconditioning prompt injected into the model's ChatML template.
-            </p>
-          </div>
         </div>
 
         {/* Footer */}
