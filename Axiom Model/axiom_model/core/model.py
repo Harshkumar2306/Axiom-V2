@@ -15,8 +15,8 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(dim, eps=norm_eps)
         self.ffn_norm = RMSNorm(dim, eps=norm_eps)
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, kv_cache=None):
-        attn_out, new_kv_cache = self.attention(self.attention_norm(x), freqs_cis, kv_cache)
+    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, kv_cache=None, attn_mask: torch.Tensor = None):
+        attn_out, new_kv_cache = self.attention(self.attention_norm(x), freqs_cis, kv_cache, attn_mask=attn_mask)
         h = x + attn_out
         out = h + self.feed_forward(self.ffn_norm(h))
         return out, new_kv_cache
@@ -69,11 +69,11 @@ class AxiomV2(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, tokens: torch.Tensor, start_pos: int = 0, kv_cache=None, return_cache: bool = False):
+    def forward(self, tokens: torch.Tensor, start_pos: int = 0, kv_cache=None, return_cache: bool = False, attn_mask: torch.Tensor = None):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
         
-        # Explicit 4096-token boundary handling (Test 3)
+        # Explicit context boundary handling
         if start_pos + seqlen > self.max_seq_len:
             raise ValueError(f"Context window overflow: {start_pos + seqlen} > {self.max_seq_len}")
             
@@ -85,11 +85,9 @@ class AxiomV2(nn.Module):
             layer_cache = kv_cache[i] if kv_cache is not None else None
             
             if self.gradient_checkpointing and self.training:
-                # use_reentrant=False is the recommended way for PyTorch >= 1.11
-                # Checkpoint doesn't easily support multiple return values, but during training kv_cache is always None
-                h, _ = torch.utils.checkpoint.checkpoint(layer, h, freqs_cis, None, use_reentrant=False)
+                h, _ = torch.utils.checkpoint.checkpoint(layer, h, freqs_cis, None, attn_mask, use_reentrant=False)
             else:
-                h, cache = layer(h, freqs_cis, layer_cache)
+                h, cache = layer(h, freqs_cis, layer_cache, attn_mask=attn_mask)
                 new_kv_caches.append(cache)
             
         h = self.norm(h)
@@ -98,3 +96,62 @@ class AxiomV2(nn.Module):
         if return_cache:
             return output, new_kv_caches
         return output
+
+    def get_num_params(self, non_embedding: bool = True) -> int:
+        """Return the number of parameters in the model."""
+        n_params = sum(p.numel() for p in self.parameters())
+        if non_embedding:
+            n_params -= self.tok_embeddings.weight.numel()
+        return n_params
+
+    def estimate_mfu(self, fwdbwd_per_iter: int, dt: float, peak_flops: float = 65e12) -> float:
+        """Estimate Model FlOPs Utilization (MFU) relative to hardware peak theoretical FLOPs.
+        
+        Standard formula: 6 * N * sequence_length per token (forward + backward),
+        plus attention overhead 12 * L * H * Q * T.
+        """
+        N = self.get_num_params(non_embedding=True)
+        L = self.n_layers
+        H = len(self.layers[0].attention.wq.weight) // (self.layers[0].attention.head_dim)
+        Q = self.layers[0].attention.head_dim
+        T = self.max_seq_len
+        flops_per_token = 6 * N + 12 * L * H * Q * T
+        flops_per_fwdbwd = flops_per_token * T
+        flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter
+        flops_achieved = flops_per_iter / dt
+        return flops_achieved / peak_flops
+
+    def configure_optimizers(self, weight_decay: float = 0.1, learning_rate: float = 3e-4, 
+                             betas: tuple = (0.9, 0.95), device_type: str = 'cuda'):
+        """Configure AdamW with decoupled weight decay (only on 2D matrices; zero on norms & biases)."""
+        decay = set()
+        no_decay = set()
+        whitelist_weight_modules = (nn.Linear, nn.Embedding)
+        blacklist_weight_modules = (RMSNorm, nn.LayerNorm)
+
+        for mn, m in self.named_modules():
+            for pn, p in m.named_parameters():
+                fpn = f'{mn}.{pn}' if mn else pn
+                if pn.endswith('bias'):
+                    no_decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
+                    decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
+                    no_decay.add(fpn)
+
+        # Intersect with named_parameters
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        inter_params = decay & no_decay
+        union_params = decay | no_decay
+        assert len(inter_params) == 0, f"Parameters {inter_params} made it into both decay/no_decay sets!"
+        assert len(param_dict.keys() - union_params) == 0, f"Parameters {param_dict.keys() - union_params} were not separated into decay/no_decay!"
+
+        optim_groups = [
+            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
+        ]
+
+        # Use fused AdamW kernel if on CUDA
+        use_fused = (device_type == 'cuda') and ('fused' in torch.optim.AdamW.__init__.__code__.co_varnames)
+        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, fused=use_fused)
+        return optimizer

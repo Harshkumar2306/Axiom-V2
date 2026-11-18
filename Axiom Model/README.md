@@ -288,21 +288,44 @@ The FastAPI server exposes clean REST and Server-Sent Events (SSE) endpoints:
 
 ---
 
-## 🏋️ Training Reproducibility
+## 🏋️ Training & Benchmarking CLI
 
-### Pretraining (Phase 3)
+Axiom V2 provides a unified, production-grade CLI (`train.py`) supporting Distributed Data Parallel (DDP) pretraining, Supervised Fine-Tuning (SFT), evaluation, and hardware benchmarking.
+
+### 1. Pretraining (Stage 1 / Phase 3)
 ```bash
-NCCL_P2P_DISABLE=1 NCCL_IB_DISABLE=1 torchrun --nproc_per_node=2 "Axiom Model/train_ddp.py" \
+# Distributed Pretraining across 2 GPUs with TF32, SDPA, and no_sync() accumulation:
+NCCL_P2P_DISABLE=1 NCCL_IB_DISABLE=1 torchrun --nproc_per_node=2 "Axiom Model/train.py" pretrain \
     --config "Axiom Model/axiom_model/configs/500M.yaml" \
     --train_data "/path/to/train.bin" \
+    --val_data "/path/to/val.bin" \
+    --output_dir "./checkpoints"
+```
+
+### 2. Supervised Fine-Tuning (Stage 2 / Phase 4)
+```bash
+# SFT with ChatML prompt masking & optional 10% Mixed Replay anti-forgetting:
+torchrun --nproc_per_node=2 "Axiom Model/train.py" sft \
+    --config "Axiom Model/axiom_model/configs/500M.yaml" \
+    --pretrained "./best.pt" \
+    --data "dataset/sft/sft_data.pt" \
+    --save_dir "./checkpoints_sft"
+```
+
+### 3. Model Evaluation & Perplexity
+```bash
+python "Axiom Model/train.py" eval \
+    --checkpoint "./best.pt" \
+    --config "Axiom Model/axiom_model/configs/500M.yaml" \
     --val_data "/path/to/val.bin"
 ```
 
-### Supervised Fine-Tuning (Phase 4)
+### 4. Hardware Throughput & MFU Benchmark
 ```bash
-torchrun --nproc_per_node=2 "Axiom Model/train_sft.py" \
-    --config "Axiom Model/axiom_model/configs/500M.yaml" \
-    --sft_data "dataset/sft/sft_data.pt"
+python "Axiom Model/train.py" benchmark \
+    --batch_size 2 \
+    --seq_len 512 \
+    --dtype float16
 ```
 
 ---
@@ -318,28 +341,31 @@ Axiom-V2/
 ├── Axiom Model/                   # Core Model, RAG, Training & Serving Engine
 │   ├── best.pt                    # Final 476M Phase 4 SFT Weights (1.9 GB Git LFS)
 │   ├── app.py                     # FastAPI backend with SSE streaming & RAG endpoints
+│   ├── train.py                   # Unified High-Performance Training Engine CLI
 │   ├── generate.py                # High-efficiency inference engine (KV-cache, RoPE, Top-P)
 │   ├── rag_engine.py              # Vector RAG (all-MiniLM-L6-v2) & Deep Web Search scraper
+│   ├── run_eval.py                # LM-Evaluation Harness adapter
 │   ├── requirements.txt           # Python dependencies manifest
-│   ├── test_engine.py             # KV-cache vs non-KV equivalence tests
-│   ├── test_sft.py                # Post-SFT verification suite
-│   ├── train_ddp.py               # Distributed DDP pretraining harness
-│   ├── train_sft.py               # Supervised fine-tuning pipeline
 │   │
 │   ├── axiom_model/               # Custom PyTorch Architecture Module
 │   │   ├── configs/
 │   │   │   └── 500M.yaml          # Hyperparameters and architecture specification
 │   │   ├── core/
-│   │   │   ├── model.py           # AxiomV2 Transformer Module
+│   │   │   ├── model.py           # AxiomV2 Transformer Module (SDPA, MFU, Optimizer Config)
 │   │   │   ├── attention.py       # Grouped-Query Attention (GQA) & RoPE kernels
 │   │   │   └── ffn.py             # SwiGLU Feed-Forward Network & RMSNorm
 │   │   └── training/
-│   │       ├── trainer.py         # Training harness with gradient accumulation
-│   │       ├── checkpoint.py      # Atomic checkpointing manager
+│   │       ├── trainer.py         # Mixed-precision trainer with gradient accumulation & no_sync()
+│   │       ├── checkpoint.py      # Atomic crash-safe checkpointing manager
 │   │       ├── dataloader.py      # High-throughput binary memmap dataloader
-│   │       └── sft_dataloader.py  # ChatML instruction packing dataloader
+│   │       ├── sft_dataloader.py  # ChatML instruction packing & mixed replay dataloader
+│   │       ├── scheduler.py       # Cosine Annealing and Warmup-Stable-Decay (WSD) schedulers
+│   │       ├── evaluator.py       # Synchronous distributed validation evaluator
+│   │       ├── profiler.py        # Real-time throughput & memory telemetry
+│   │       └── logger.py          # CSV and Weights & Biases telemetry logger
 │   │
-│   └── knowledge_base/            # Persistent vector embeddings cache (index.pt, metadata.json)
+│   ├── data_pipeline/             # Streaming and token packing pipeline
+│   └── sft_pipeline/              # ChatML instruction curation utilities
 │
 └── Axiom Web/                     # Frontend Application & Web Artifacts
     ├── ui/                        # React 18 + Vite Single Page Application

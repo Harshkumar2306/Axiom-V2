@@ -46,10 +46,14 @@ class Trainer:
             dtype = torch.bfloat16
         return dtype
 
-    def train_step(self, x, y, is_last_accum_step=True):
-        # Mixed Precision
+    def train_step(self, x, y, is_last_accum_step=True, attn_mask=None):
+        # Mixed Precision Autocast
         with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype):
-            logits = self.model(x)
+            if attn_mask is not None:
+                logits = self.model(x, attn_mask=attn_mask)
+            else:
+                logits = self.model(x)
+                
             loss = MetricsCalculator.compute_loss(logits, y)
             # Scale loss by accumulation steps so gradients are mathematically equivalent to larger batch
             loss = loss / self.grad_accum_steps
@@ -57,23 +61,29 @@ class Trainer:
         scaled_loss = loss.item() * self.grad_accum_steps
             
         # Backward pass with scaler
-        self.scaler.scale(loss).backward()
+        if self.scaler.is_enabled():
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
         
         if is_last_accum_step:
-            # Unscale gradients for clipping
-            self.scaler.unscale_(self.optimizer)
+            if self.scaler.is_enabled():
+                # Unscale gradients for clipping
+                self.scaler.unscale_(self.optimizer)
             
-            # 3. Gradient NaN/Explosion Trap
+            # Gradient NaN/Explosion Trap
             grad_norm = clip_grad_norm_(self.model.parameters(), self.clip_grad)
             if not torch.isfinite(grad_norm):
                 logger.warning(f"[Gradient Safety] Gradient norm is {grad_norm.item()}! Skipping optimizer step to save weights.")
                 self.optimizer.zero_grad(set_to_none=True)
             else:
-                self.scaler.step(self.optimizer)
+                if self.scaler.is_enabled():
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
                 
-            self.scaler.update()
             self.optimizer.zero_grad(set_to_none=True)
-            
             return scaled_loss, grad_norm.item()
             
         return scaled_loss, None

@@ -50,6 +50,27 @@ class SchedulerManager:
                 return eta_min_ratio + (1.0 - eta_min_ratio) * cosine
 
             self.scheduler = LambdaLR(self.optimizer, lr_lambda)
+        elif self.type in ['wsd', 'warmup_stable_decay']:
+            # Warmup-Stable-Decay (WSD): linear warmup, constant stable phase, rapid decay at end
+            warmup_steps = int(self.config.get('warmup_steps', 2000))
+            max_steps = int(self.config.get('max_steps', 100000))
+            decay_ratio = float(self.config.get('decay_ratio', 0.15))  # last 15% steps
+            decay_steps = int(max_steps * decay_ratio)
+            stable_steps = max_steps - decay_steps
+            eta_min_ratio = float(self.config.get('eta_min_ratio', 0.05))
+
+            def wsd_lambda(step: int):
+                if step < warmup_steps:
+                    return (step + 1) / max(1, warmup_steps)
+                elif step < stable_steps:
+                    return 1.0
+                else:
+                    progress = (step - stable_steps) / max(1, decay_steps)
+                    progress = min(1.0, progress)
+                    cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+                    return eta_min_ratio + (1.0 - eta_min_ratio) * cosine
+
+            self.scheduler = LambdaLR(self.optimizer, wsd_lambda)
         else:
             raise ValueError(f"Unknown scheduler type: {self.type}")
 

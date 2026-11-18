@@ -67,7 +67,7 @@ class Attention(nn.Module):
         # We disable it here to restore the 3x speedup via manual repeat_interleave.
         self._use_native_gqa = False
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, kv_cache=None):
+    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, kv_cache=None, attn_mask: torch.Tensor = None):
         bsz, seqlen, _ = x.shape
 
         xq = self.wq(x)
@@ -99,16 +99,18 @@ class Attention(nn.Module):
         xk = xk.transpose(1, 2)
         xv = xv.transpose(1, 2)
 
-        # Causal mask is only needed during prompt prefill (seqlen > 1)
-        # During incremental decoding (seqlen == 1), querying past tokens is naturally causal.
-        is_causal = seqlen > 1
+        # Causal mask is only needed during prompt prefill (seqlen > 1) when no custom mask is passed
+        is_causal = (seqlen > 1) if attn_mask is None else False
 
-        # FlashAttention-2 Fallback
-        # PyTorch 2.x will automatically use FlashAttention-2 if available when using scaled_dot_product_attention
+        # FlashAttention-2 / SDPA dispatch
         if self._use_native_gqa:
-            output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=is_causal, enable_gqa=True)
+            output = F.scaled_dot_product_attention(
+                xq, xk, xv, attn_mask=attn_mask, is_causal=is_causal, enable_gqa=True
+            )
         else:
-            output = F.scaled_dot_product_attention(xq, xk, xv, is_causal=is_causal)
+            output = F.scaled_dot_product_attention(
+                xq, xk, xv, attn_mask=attn_mask, is_causal=is_causal
+            )
 
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         return self.wo(output), new_kv_cache
