@@ -86,7 +86,7 @@ async def chat_endpoint(request: ChatRequest):
     if request.web_search and web_engine:
         try:
             print(f"🔍 Executing live web search for: '{request.prompt}'...")
-            search_data = web_engine.search_and_deep_scrape(request.prompt, max_results=3)
+            search_data = await web_engine.search_and_deep_scrape(request.prompt, max_results=3)
             if search_data.get("context"):
                 context_sections.append(search_data['context'])
                 for s in search_data.get("sources", []):
@@ -103,14 +103,15 @@ async def chat_endpoint(request: ChatRequest):
     # 📚 2. Local Document Vector RAG Search
     if request.rag_search and rag_engine and len(rag_engine.chunks) > 0:
         try:
-            doc_matches = rag_engine.search(request.prompt, top_k=3, min_similarity=0.25)
+            doc_matches = rag_engine.search(request.prompt, top_k=4)
             if doc_matches:
                 doc_context_items = []
                 for idx, match in enumerate(doc_matches):
                     src_name = match.get("source", "Document")
                     text_content = match.get("text", "")
-                    clean_doc_slice = text_content.strip()[:350]
-                    doc_context_items.append(f"- From {src_name}: {clean_doc_slice}")
+                    heading = match.get("heading", "")
+                    prefix = f"- From {src_name}" + (f" ({heading})" if heading else "")
+                    doc_context_items.append(f"{prefix}: {text_content.strip()}")
                     collected_sources.append({
                         "type": "doc",
                         "title": src_name,
@@ -118,7 +119,7 @@ async def chat_endpoint(request: ChatRequest):
                         "snippet": text_content[:180] + "..." if len(text_content) > 180 else text_content
                     })
                 context_sections.append("\n".join(doc_context_items))
-                print(f"✅ Document RAG injected ({len(doc_matches)} matching chunks).")
+                print(f"✅ Document RAG injected ({len(doc_matches)} matching chunks via FAISS+BM25).")
         except Exception as e:
             print(f"⚠️ Document RAG search error: {e}")
 
@@ -182,10 +183,12 @@ async def delete_rag_documents(filename: Optional[str] = None):
 
 @app.get("/health")
 async def health_check():
+    vector_backend = "FAISS (Native Accelerated)" if (rag_engine and rag_engine.vector_store.use_faiss) else "PyTorch Dense"
     return {
         "status": "healthy",
         "model_loaded": MODEL is not None,
         "device": DEVICE,
+        "vector_backend": vector_backend,
         "rag_chunks": len(rag_engine.chunks) if rag_engine else 0,
         "rag_documents": len(rag_engine.list_documents()) if rag_engine else 0
     }
